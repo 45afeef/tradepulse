@@ -1,0 +1,211 @@
+package api
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"math"
+	"net"
+	"net/http"
+	"slices"
+	"strings"
+	"sync"
+	"time"
+)
+
+type ctxKey int
+
+const (
+	userKey ctxKey = iota
+	reqIDKey
+)
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) { r.status = code; r.ResponseWriter.WriteHeader(code) }
+
+// Unwrap lets http.ResponseController reach the Hijacker (needed for WebSocket).
+func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
+func requestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b := make([]byte, 8)
+		_, _ = rand.Read(b)
+		id := hex.EncodeToString(b) // never trust a client-supplied ID in logs
+		w.Header().Set("X-Request-ID", id)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), reqIDKey, id)))
+	})
+}
+
+func (s *Server) recoverer(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				s.Log.Error("handler panic", "panic", rec, "path", r.URL.Path)
+				writeError(w, http.StatusInternalServerError, "internal", "internal server error")
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		id, _ := r.Context().Value(reqIDKey).(string)
+		// r.URL.Path only: query strings can carry tickets.
+		s.Log.Info("request", "id", id, "method", r.Method, "path", r.URL.Path,
+			"status", rec.status, "dur_ms", time.Since(start).Milliseconds(), "ip", s.clientIP(r))
+	})
+}
+
+func (s *Server) securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Cache-Control", "no-store")
+		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		if s.Cfg.Production() {
+			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if o := r.Header.Get("Origin"); o != "" && slices.Contains(s.Cfg.AllowedOrigins, o) {
+			h := w.Header()
+			h.Set("Access-Control-Allow-Origin", o)
+			h.Add("Vary", "Origin")
+			if r.Method == http.MethodOptions {
+				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+				h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+				h.Set("Access-Control-Max-Age", "600")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) clientIP(r *http.Request) string {
+	if s.Cfg.TrustProxy {
+		// Use the entry appended by our own trusted proxy (the last one).
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			return strings.TrimSpace(parts[len(parts)-1])
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+func (s *Server) rateLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.global.allow(s.clientIP(r)) {
+			tooMany(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) authLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.authLim.allow(s.clientIP(r)) {
+			tooMany(w)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func tooMany(w http.ResponseWriter) {
+	w.Header().Set("Retry-After", "10")
+	writeError(w, http.StatusTooManyRequests, "rate_limited", "too many requests")
+}
+
+func (s *Server) requireAuth(next http.HandlerFunc) http.Handler {
+	const prefix = "Bearer "
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := r.Header.Get("Authorization")
+		if len(h) <= len(prefix) || !strings.EqualFold(h[:len(prefix)], prefix) {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
+			return
+		}
+		claims, err := s.JWT.Verify(h[len(prefix):])
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
+			return
+		}
+		next(w, r.WithContext(context.WithValue(r.Context(), userKey, claims.Sub)))
+	})
+}
+
+func userID(r *http.Request) string { id, _ := r.Context().Value(userKey).(string); return id }
+
+// limiter is a per-key token bucket.
+type bucket struct {
+	tokens float64
+	last   time.Time
+}
+
+type limiter struct {
+	mu    sync.Mutex
+	m     map[string]*bucket
+	rate  float64
+	burst float64
+}
+
+func newLimiter(rate float64, burst int) *limiter {
+	return &limiter{m: map[string]*bucket{}, rate: rate, burst: float64(burst)}
+}
+
+func (l *limiter) allow(key string) bool {
+	now := time.Now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	b, ok := l.m[key]
+	if !ok {
+		b = &bucket{tokens: l.burst, last: now}
+		l.m[key] = b
+	}
+	b.tokens = math.Min(l.burst, b.tokens+now.Sub(b.last).Seconds()*l.rate)
+	b.last = now
+	if b.tokens < 1 {
+		return false
+	}
+	b.tokens--
+	return true
+}
+
+func (l *limiter) sweep(ctx context.Context) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			l.mu.Lock()
+			for k, b := range l.m {
+				if now.Sub(b.last) > 10*time.Minute {
+					delete(l.m, k)
+				}
+			}
+			l.mu.Unlock()
+		}
+	}
+}
