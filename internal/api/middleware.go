@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"math"
 	"net"
 	"net/http"
@@ -71,7 +72,11 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Cache-Control", "no-store")
-		h.Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		csp := "default-src 'none'; frame-ancestors 'none'"
+		if s.Cfg.DocsEnabled && r.URL.Path == "/docs" { // dev-only docs UI needs a CDN script
+			csp = "default-src 'none'; script-src https://unpkg.com 'unsafe-inline'; style-src https://unpkg.com 'unsafe-inline'; img-src 'self' data: https:; font-src https://unpkg.com data:; connect-src 'self'; frame-ancestors 'none'"
+		}
+		h.Set("Content-Security-Policy", csp)
 		if s.Cfg.Production() {
 			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
@@ -114,17 +119,8 @@ func (s *Server) clientIP(r *http.Request) string {
 
 func (s *Server) rateLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.global.allow(s.clientIP(r)) {
-			tooMany(w)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (s *Server) authLimit(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.authLim.allow(s.clientIP(r)) {
+		ip := s.clientIP(r)
+		if !s.global.allow(ip) || (strings.HasPrefix(r.URL.Path, "/api/v1/auth/") && !s.authLim.allow(ip)) {
 			tooMany(w)
 			return
 		}
@@ -136,25 +132,6 @@ func tooMany(w http.ResponseWriter) {
 	w.Header().Set("Retry-After", "10")
 	writeError(w, http.StatusTooManyRequests, "rate_limited", "too many requests")
 }
-
-func (s *Server) requireAuth(next http.HandlerFunc) http.Handler {
-	const prefix = "Bearer "
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := r.Header.Get("Authorization")
-		if len(h) <= len(prefix) || !strings.EqualFold(h[:len(prefix)], prefix) {
-			writeError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
-			return
-		}
-		claims, err := s.JWT.Verify(h[len(prefix):])
-		if err != nil {
-			writeError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired token")
-			return
-		}
-		next(w, r.WithContext(context.WithValue(r.Context(), userKey, claims.Sub)))
-	})
-}
-
-func userID(r *http.Request) string { id, _ := r.Context().Value(userKey).(string); return id }
 
 // limiter is a per-key token bucket.
 type bucket struct {
@@ -208,4 +185,20 @@ func (l *limiter) sweep(ctx context.Context) {
 			l.mu.Unlock()
 		}
 	}
+}
+
+// bodyLimit caps every request body (defense in depth; operations set tighter limits).
+func bodyLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// writeError writes an RFC 9457-style problem body for errors raised outside Huma
+// (panics, rate limits), matching the shape Huma uses for its own errors.
+func writeError(w http.ResponseWriter, status int, _ string, msg string) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{"title": http.StatusText(status), "status": status, "detail": msg})
 }

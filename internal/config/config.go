@@ -22,6 +22,7 @@ type Config struct {
 	RateRPS        float64
 	RateBurst      int
 	MaxWSPerUser   int
+	DocsEnabled    bool
 
 	SimEnabled  bool
 	SimSymbols  []string
@@ -53,6 +54,11 @@ func Load() (Config, error) {
 	}
 	c.TrustProxy = get("TRUST_PROXY", "false") == "true"
 	c.SimEnabled = get("SIM_ENABLED", "true") == "true"
+	// Docs (/docs, /openapi.json) default ON in dev and OFF in production.
+	c.DocsEnabled = get("DOCS_ENABLED", strconv.FormatBool(!c.Production())) == "true"
+	if c.Production() && strings.HasPrefix(c.JWTSecret, "change-me") {
+		return c, errors.New("JWT_SECRET is still the placeholder value")
+	}
 	c.AllowedOrigins = split(get("ALLOWED_ORIGINS", ""))
 	c.SimSymbols = split(get("SIM_SYMBOLS", "RELIANCE,TCS,HDFCBANK,INFY,ICICIBANK,SBIN,ITC,LT,BHARTIARTL,TATAMOTORS"))
 	if err := c.LogLevel.UnmarshalText([]byte(get("LOG_LEVEL", "info"))); err != nil {

@@ -1,0 +1,7 @@
+tmp/
+.env
+.env.production
+*.test
+.git
+openapi.json
+*.md

@@ -1,0 +1,10 @@
+# Development image: hot reload with air. Source is bind-mounted by compose.yaml.
+FROM golang:1.24
+# Official golang images set GOTOOLCHAIN=local. The newest `air` can require a newer Go
+# than this image, so let Go fetch the toolchain it needs.
+ENV GOTOOLCHAIN=auto
+RUN go install github.com/air-verse/air@latest
+WORKDIR /app
+EXPOSE 8080
+# `go mod tidy` resolves deps (and creates go.sum) on first run
+CMD ["sh", "-c", "go mod tidy && air -c .air.toml"]

@@ -1,0 +1,27 @@
+# Production example (single host). Put a TLS reverse proxy in front (see README).
+# Run: docker compose -f compose.prod.yaml up -d --build
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tradepulse:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"   # only the local reverse proxy can reach it
+    env_file: .env.production    # contains JWT_SECRET etc. Never commit it.
+    environment:
+      APP_ENV: production
+      DOCS_ENABLED: "false"
+      TRUST_PROXY: "true"        # only because a trusted proxy sits in front
+      SIM_ENABLED: "false"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD", "/server", "healthcheck"]
+      interval: 15s
+      timeout: 3s
+      retries: 3

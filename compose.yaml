@@ -1,0 +1,20 @@
+# Development: `docker compose up --build` -> http://localhost:8080/docs
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ENV: development
+      DOCS_ENABLED: "true"
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-0123456789abcdef0123}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      SIM_ENABLED: "true"
+      LOG_LEVEL: debug
+    volumes:
+      - .:/app
+      - gomod:/go/pkg/mod
+volumes:
+  gomod:

@@ -1,179 +1,156 @@
 package api
 
 import (
-	"encoding/json"
+	"context"
 	"errors"
-	"io"
 	"net/http"
 	"net/mail"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
+
 	"tradepulse/internal/auth"
+	"tradepulse/internal/domain/feed"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
 )
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
+func userID(ctx context.Context) string { id, _ := ctx.Value(userKey).(string); return id }
 
-func writeError(w http.ResponseWriter, status int, code, msg string) {
-	writeJSON(w, status, map[string]any{"error": map[string]string{"code": code, "message": msg}})
-}
+// ---- types (these ARE the API docs: tags drive validation + OpenAPI) ----
 
-// decode reads a size-limited, strict JSON body.
-func decode(w http.ResponseWriter, r *http.Request, v any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(v); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "malformed request body")
-		return false
-	}
-	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		writeError(w, http.StatusBadRequest, "invalid_json", "unexpected trailing data")
-		return false
-	}
-	return true
+type statusBody struct {
+	Status string `json:"status" example:"ok"`
 }
+type statusOut struct{ Body statusBody }
 
-type credentials struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+type credentialsBody struct {
+	Email    string `json:"email" maxLength:"254" example:"trader@example.com"`
+	Password string `json:"password" minLength:"10" maxLength:"128" example:"a-long-password"`
 }
+type credentialsIn struct{ Body credentialsBody }
 
 type publicUser struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
 	CreatedAt time.Time `json:"created_at"`
 }
+type tokenBody struct {
+	Token string     `json:"token" doc:"JWT; send as 'Authorization: Bearer <token>'"`
+	User  publicUser `json:"user"`
+}
+type tokenOut struct{ Body tokenBody }
 
-func (s *Server) tokenResponse(w http.ResponseWriter, status int, u user.User) {
+type profileIn struct{ Body user.Profile }
+type profileOut struct{ Body user.Profile }
+
+type feedIn struct {
+	Limit int `query:"limit" default:"50" minimum:"1" maximum:"200" doc:"Max items, newest first"`
+}
+type feedBody struct {
+	Items []feed.FeedItem `json:"items"`
+}
+type feedOut struct{ Body feedBody }
+
+type ticketBody struct {
+	Ticket    string `json:"ticket" doc:"Single-use; connect to /ws?ticket=<ticket> within expires_in seconds"`
+	ExpiresIn int    `json:"expires_in" example:"30"`
+}
+type ticketOut struct{ Body ticketBody }
+
+// ---- handlers ----
+
+func (s *Server) health(_ context.Context, _ *struct{}) (*statusOut, error) {
+	return &statusOut{Body: statusBody{Status: "ok"}}, nil
+}
+
+func (s *Server) tokenFor(u user.User) (*tokenOut, error) {
 	tok, err := s.JWT.Issue(u.ID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", "could not issue token")
-		return
+		return nil, huma.Error500InternalServerError("could not issue token")
 	}
-	writeJSON(w, status, map[string]any{
-		"token": tok, "user": publicUser{ID: u.ID, Email: u.Email, CreatedAt: u.CreatedAt},
-	})
+	return &tokenOut{Body: tokenBody{Token: tok, User: publicUser{ID: u.ID, Email: u.Email, CreatedAt: u.CreatedAt}}}, nil
 }
 
-func (s *Server) register(w http.ResponseWriter, r *http.Request) {
-	var c credentials
-	if !decode(w, r, &c) {
-		return
+func (s *Server) signup(ctx context.Context, in *credentialsIn) (*tokenOut, error) {
+	raw := strings.TrimSpace(in.Body.Email)
+	addr, err := mail.ParseAddress(raw)
+	if err != nil || addr.Address != raw || len(raw) > 254 {
+		return nil, huma.Error422UnprocessableEntity("a valid email is required")
 	}
-	addr, err := mail.ParseAddress(strings.TrimSpace(c.Email))
-	if err != nil || addr.Name != "" || len(addr.Address) > 254 {
-		writeError(w, http.StatusBadRequest, "invalid_email", "a valid email is required")
-		return
-	}
-	if len(c.Password) < 10 || len(c.Password) > 128 {
-		writeError(w, http.StatusBadRequest, "invalid_password", "password must be 10-128 characters")
-		return
-	}
-	hash, err := auth.HashPassword(c.Password)
+	hash, err := auth.HashPassword(in.Body.Password)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", "could not process password")
-		return
+		return nil, huma.Error500InternalServerError("could not process password")
 	}
 	u := user.User{
-		ID: idgen.New(), Email: strings.ToLower(addr.Address), PasswordHash: hash,
+		ID: idgen.New(), Email: strings.ToLower(raw), PasswordHash: hash,
 		CreatedAt: time.Now().UTC(), Profile: user.DefaultProfile(),
 	}
-	if err := s.Users.Create(r.Context(), u); err != nil {
+	if err := s.Users.Create(ctx, u); err != nil {
 		if errors.Is(err, user.ErrEmailTaken) {
-			writeError(w, http.StatusConflict, "email_taken", "email already registered")
-			return
+			return nil, huma.Error409Conflict("email already registered")
 		}
 		s.Log.Error("create user", "err", err)
-		writeError(w, http.StatusInternalServerError, "internal", "internal server error")
-		return
+		return nil, huma.Error500InternalServerError("internal server error")
 	}
-	s.tokenResponse(w, http.StatusCreated, u)
+	return s.tokenFor(u)
 }
 
-func (s *Server) login(w http.ResponseWriter, r *http.Request) {
-	var c credentials
-	if !decode(w, r, &c) {
-		return
-	}
-	u, err := s.Users.GetByEmail(r.Context(), strings.TrimSpace(c.Email))
+func (s *Server) login(ctx context.Context, in *credentialsIn) (*tokenOut, error) {
+	u, err := s.Users.GetByEmail(ctx, strings.TrimSpace(in.Body.Email))
 	hash := u.PasswordHash
 	if err != nil {
-		hash = s.dummyHash // equalise timing so unknown emails are not distinguishable
+		hash = s.dummyHash // equalise timing so unknown emails are indistinguishable
 	}
-	if !auth.VerifyPassword(c.Password, hash) || err != nil {
-		writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")
-		return
+	if !auth.VerifyPassword(in.Body.Password, hash) || err != nil {
+		return nil, huma.Error401Unauthorized("invalid email or password")
 	}
-	s.tokenResponse(w, http.StatusOK, u)
+	return s.tokenFor(u)
 }
 
-func (s *Server) getProfile(w http.ResponseWriter, r *http.Request) {
-	u, err := s.Users.GetByID(r.Context(), userID(r))
+func (s *Server) getProfile(ctx context.Context, _ *struct{}) (*profileOut, error) {
+	u, err := s.Users.GetByID(ctx, userID(ctx))
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "unknown user")
-		return
+		return nil, huma.Error401Unauthorized("unknown user")
 	}
-	writeJSON(w, http.StatusOK, u.Profile)
+	return &profileOut{Body: u.Profile}, nil
 }
 
-func (s *Server) putProfile(w http.ResponseWriter, r *http.Request) {
-	var in user.Profile
-	if !decode(w, r, &in) {
-		return
-	}
-	p, err := in.Normalize()
+func (s *Server) putProfile(ctx context.Context, in *profileIn) (*profileOut, error) {
+	p, err := in.Body.Normalize()
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "invalid_profile", err.Error())
-		return
+		return nil, huma.Error422UnprocessableEntity(err.Error())
 	}
-	id := userID(r)
-	if err := s.Users.UpdateProfile(r.Context(), id, p); err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "unknown user")
-		return
+	id := userID(ctx)
+	if err := s.Users.UpdateProfile(ctx, id, p); err != nil {
+		return nil, huma.Error401Unauthorized("unknown user")
 	}
 	s.Personalizer.UpsertUser(id, p)
-	writeJSON(w, http.StatusOK, p)
+	return &profileOut{Body: p}, nil
 }
 
-func (s *Server) getFeed(w http.ResponseWriter, r *http.Request) {
-	limit := 50
-	if v := r.URL.Query().Get("limit"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > 200 {
-			writeError(w, http.StatusBadRequest, "invalid_limit", "limit must be 1-200")
-			return
-		}
-		limit = n
-	}
-	items, err := s.Feeds.Recent(r.Context(), userID(r), limit)
+func (s *Server) getFeed(ctx context.Context, in *feedIn) (*feedOut, error) {
+	items, err := s.Feeds.Recent(ctx, userID(ctx), in.Limit)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", "internal server error")
-		return
+		return nil, huma.Error500InternalServerError("internal server error")
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	return &feedOut{Body: feedBody{Items: items}}, nil
 }
 
-func (s *Server) wsTicket(w http.ResponseWriter, r *http.Request) {
-	t, err := s.Tickets.Issue(userID(r))
+func (s *Server) wsTicket(ctx context.Context, _ *struct{}) (*ticketOut, error) {
+	t, err := s.Tickets.Issue(userID(ctx))
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", "internal server error")
-		return
+		return nil, huma.Error500InternalServerError("internal server error")
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ticket": t, "expires_in": 30})
+	return &ticketOut{Body: ticketBody{Ticket: t, ExpiresIn: 30}}, nil
 }
 
+// ws is a plain handler: WebSocket is not expressible in OpenAPI.
 func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	uid, ok := s.Tickets.Redeem(r.URL.Query().Get("ticket"))
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired ticket")
+		http.Error(w, "invalid or expired ticket", http.StatusUnauthorized)
 		return
 	}
 	s.Hub.Upgrade(w, r, uid)
