@@ -14,7 +14,7 @@ services:
       APP_ENV: production
       DOCS_ENABLED: "false"
       TRUST_PROXY: "true"        # only because a trusted proxy sits in front
-      SIM_ENABLED: "false"
+      SIM_DEMO: "none"
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]

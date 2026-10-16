@@ -1,9 +1,23 @@
-# Development: `docker compose up --build` -> http://localhost:8080/docs
+# Development, identical on Windows / macOS / Linux. Only Docker is required.
+#   docker compose up --build              dev server + hot reload -> http://localhost:8080/docs
+#   docker compose run --rm check          vet + race tests
+#   docker compose run --rm test           tests only
+#   docker compose run --rm openapi        regenerate openapi.json
+#   docker compose run --rm tidy           resolve deps / update go.sum
+x-go: &go
+  image: tradepulse-dev          # one image shared by every service below
+  build:
+    context: .
+    dockerfile: Dockerfile.dev
+  working_dir: /app
+  volumes:
+    - .:/app
+    - gomod:/go/pkg/mod          # dependency cache
+    - gobuild:/root/.cache/go-build
+
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
+    <<: *go
     ports:
       - "8080:8080"
     environment:
@@ -11,10 +25,27 @@ services:
       DOCS_ENABLED: "true"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-0123456789abcdef0123}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
-      SIM_ENABLED: "true"
+      SIM_DEMO: market
       LOG_LEVEL: debug
-    volumes:
-      - .:/app
-      - gomod:/go/pkg/mod
+
+  # --- one-shot tools (not started by `up`) ---
+  check:
+    <<: *go
+    profiles: [tools]
+    command: sh -c "go mod tidy && go vet ./... && go test -race ./..."
+  test:
+    <<: *go
+    profiles: [tools]
+    command: go test -race ./...
+  openapi:
+    <<: *go
+    profiles: [tools]
+    command: sh -c "go mod tidy && go run ./cmd/openapi > openapi.json"
+  tidy:
+    <<: *go
+    profiles: [tools]
+    command: go mod tidy
+
 volumes:
   gomod:
+  gobuild:

@@ -13,6 +13,7 @@ import (
 	"tradepulse/internal/auth"
 	"tradepulse/internal/config"
 	"tradepulse/internal/delivery"
+	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/feed"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
@@ -32,6 +33,7 @@ type Deps struct {
 	Tickets      *auth.TicketStore
 	Personalizer Personalizer
 	Hub          *delivery.Hub
+	Registry     *event.Registry
 }
 
 type Server struct {
@@ -89,10 +91,12 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 	huma.Register(api, huma.Operation{OperationID: "login", Method: http.MethodPost, Path: "/api/v1/auth/login",
 		Summary: "Log in and get a JWT", Tags: []string{"auth"}, MaxBodyBytes: small}, s.login)
 
-	huma.Register(api, huma.Operation{OperationID: "get-profile", Method: http.MethodGet, Path: "/api/v1/me/profile",
-		Summary: "Get my personalization profile", Tags: []string{"me"}, Security: secured, Middlewares: needAuth}, s.getProfile)
-	huma.Register(api, huma.Operation{OperationID: "put-profile", Method: http.MethodPut, Path: "/api/v1/me/profile",
-		Summary: "Replace my personalization profile", Tags: []string{"me"}, Security: secured, Middlewares: needAuth, MaxBodyBytes: small}, s.putProfile)
+	huma.Register(api, huma.Operation{OperationID: "get-subscriptions", Method: http.MethodGet, Path: "/api/v1/me/subscriptions",
+		Summary: "Get my subscriptions and mutes", Tags: []string{"me"}, Security: secured, Middlewares: needAuth}, s.getSubscriptions)
+	huma.Register(api, huma.Operation{OperationID: "put-subscriptions", Method: http.MethodPut, Path: "/api/v1/me/subscriptions",
+		Summary: "Replace my subscriptions and mutes", Tags: []string{"me"}, Security: secured, Middlewares: needAuth, MaxBodyBytes: 256 << 10}, s.putSubscriptions)
+	huma.Register(api, huma.Operation{OperationID: "list-event-types", Method: http.MethodGet, Path: "/api/v1/event-types",
+		Summary: "Event types and the fields usable in subscription conditions", Tags: []string{"me"}, Security: secured, Middlewares: needAuth}, s.listEventTypes)
 	huma.Register(api, huma.Operation{OperationID: "get-feed", Method: http.MethodGet, Path: "/api/v1/me/feed",
 		Summary: "Recent feed items (newest first)", Tags: []string{"me"}, Security: secured, Middlewares: needAuth}, s.getFeed)
 	huma.Register(api, huma.Operation{OperationID: "ws-ticket", Method: http.MethodPost, Path: "/api/v1/ws-ticket",

@@ -1,4 +1,4 @@
-// Package ingestion runs source listeners and pushes normalized events to the bus.
+// Package ingestion runs source listeners and pushes validated events to the bus.
 package ingestion
 
 import (
@@ -14,7 +14,7 @@ import (
 
 // Run supervises every listener (restarting with backoff if its feed ends) and
 // blocks until ctx is cancelled and all listeners have stopped.
-func Run(ctx context.Context, log *slog.Logger, bus event.Bus, listeners []source.Listener, procs map[string]processing.Processor) {
+func Run(ctx context.Context, log *slog.Logger, bus event.Bus, reg *event.Registry, listeners []source.Listener, procs map[string]processing.Processor) {
 	var wg sync.WaitGroup
 	for _, l := range listeners {
 		p, ok := procs[l.Name()]
@@ -25,17 +25,17 @@ func Run(ctx context.Context, log *slog.Logger, bus event.Bus, listeners []sourc
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			supervise(ctx, log, bus, l, p)
+			supervise(ctx, log, bus, reg, l, p)
 		}()
 	}
 	wg.Wait()
 }
 
-func supervise(ctx context.Context, log *slog.Logger, bus event.Bus, l source.Listener, p processing.Processor) {
+func supervise(ctx context.Context, log *slog.Logger, bus event.Bus, reg *event.Registry, l source.Listener, p processing.Processor) {
 	backoff := time.Second
 	for ctx.Err() == nil {
 		started := time.Now()
-		consume(ctx, log, bus, l, p)
+		consume(ctx, log, bus, reg, l, p)
 		if ctx.Err() != nil {
 			return
 		}
@@ -54,7 +54,7 @@ func supervise(ctx context.Context, log *slog.Logger, bus event.Bus, l source.Li
 	}
 }
 
-func consume(ctx context.Context, log *slog.Logger, bus event.Bus, l source.Listener, p processing.Processor) {
+func consume(ctx context.Context, log *slog.Logger, bus event.Bus, reg *event.Registry, l source.Listener, p processing.Processor) {
 	for msg := range l.Listen(ctx) {
 		events, err := p.Process(msg)
 		if err != nil {
@@ -62,6 +62,10 @@ func consume(ctx context.Context, log *slog.Logger, bus event.Bus, l source.List
 			continue
 		}
 		for _, e := range events {
+			if err := reg.Validate(e); err != nil {
+				log.Warn("dropping invalid event", "source", l.Name(), "type", e.Type, "err", err)
+				continue
+			}
 			if err := bus.Publish(ctx, e); err != nil {
 				return
 			}

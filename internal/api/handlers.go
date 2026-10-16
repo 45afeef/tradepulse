@@ -11,6 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"tradepulse/internal/auth"
+	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/feed"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
@@ -42,8 +43,14 @@ type tokenBody struct {
 }
 type tokenOut struct{ Body tokenBody }
 
-type profileIn struct{ Body user.Profile }
-type profileOut struct{ Body user.Profile }
+type subscriptionsIn struct{ Body user.Profile }
+type subscriptionsOut struct{ Body user.Profile }
+
+type eventTypesBody struct {
+	Types         []event.TypeDef  `json:"types"`
+	BuiltinFields []event.FieldDef `json:"builtin_fields" doc:"Available on every event; usable in conditions"`
+}
+type eventTypesOut struct{ Body eventTypesBody }
 
 type feedIn struct {
 	Limit int `query:"limit" default:"50" minimum:"1" maximum:"200" doc:"Max items, newest first"`
@@ -109,16 +116,16 @@ func (s *Server) login(ctx context.Context, in *credentialsIn) (*tokenOut, error
 	return s.tokenFor(u)
 }
 
-func (s *Server) getProfile(ctx context.Context, _ *struct{}) (*profileOut, error) {
+func (s *Server) getSubscriptions(ctx context.Context, _ *struct{}) (*subscriptionsOut, error) {
 	u, err := s.Users.GetByID(ctx, userID(ctx))
 	if err != nil {
 		return nil, huma.Error401Unauthorized("unknown user")
 	}
-	return &profileOut{Body: u.Profile}, nil
+	return &subscriptionsOut{Body: u.Profile}, nil
 }
 
-func (s *Server) putProfile(ctx context.Context, in *profileIn) (*profileOut, error) {
-	p, err := in.Body.Normalize()
+func (s *Server) putSubscriptions(ctx context.Context, in *subscriptionsIn) (*subscriptionsOut, error) {
+	p, err := in.Body.Normalize(s.Registry)
 	if err != nil {
 		return nil, huma.Error422UnprocessableEntity(err.Error())
 	}
@@ -127,7 +134,11 @@ func (s *Server) putProfile(ctx context.Context, in *profileIn) (*profileOut, er
 		return nil, huma.Error401Unauthorized("unknown user")
 	}
 	s.Personalizer.UpsertUser(id, p)
-	return &profileOut{Body: p}, nil
+	return &subscriptionsOut{Body: p}, nil
+}
+
+func (s *Server) listEventTypes(_ context.Context, _ *struct{}) (*eventTypesOut, error) {
+	return &eventTypesOut{Body: eventTypesBody{Types: s.Registry.List(), BuiltinFields: event.BuiltinFieldDefs()}}, nil
 }
 
 func (s *Server) getFeed(ctx context.Context, in *feedIn) (*feedOut, error) {

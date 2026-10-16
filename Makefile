@@ -1,28 +1,18 @@
-.PHONY: help dev run tidy test vet check openapi
-
-help:
-	@echo "make dev      - docker compose dev server with hot reload (docs at /docs)"
-	@echo "make run      - run locally (needs Go; set JWT_SECRET)"
-	@echo "make tidy     - resolve dependencies (creates go.sum)"
-	@echo "make check    - vet + tests (run before every commit)"
-	@echo "make openapi  - regenerate openapi.json (commit it)"
+# OPTIONAL shortcuts for Unix/macOS. Everything is plain `docker compose`; Windows users
+# can run the docker compose commands directly (see README).
+.PHONY: dev check test openapi tidy
 
 dev:
 	docker compose up --build
 
-run:
-	go run ./cmd/server
-
-tidy:
-	go mod tidy
-
-vet:
-	go vet ./...
+check:
+	docker compose run --rm check
 
 test:
-	go test -race ./...
-
-check: vet test
+	docker compose run --rm test
 
 openapi:
-	go run ./cmd/openapi > openapi.json
+	docker compose run --rm openapi
+
+tidy:
+	docker compose run --rm tidy

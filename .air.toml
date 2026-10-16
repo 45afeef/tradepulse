@@ -7,3 +7,7 @@ tmp_dir = "tmp"
   include_ext = ["go"]
   exclude_dir = ["tmp", "vendor", ".git"]
   delay = 300
+  # Docker Desktop on Windows/macOS does not forward file-change events into
+  # containers, so poll for changes (works everywhere).
+  poll = true
+  poll_interval = 500

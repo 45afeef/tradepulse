@@ -1,15 +1,17 @@
-// Package user holds user identity and the personalization profile.
+// Package user holds user identity and the personalization profile
+// (subscriptions + mutes). It contains no domain-specific concepts.
 package user
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"tradepulse/internal/domain/event"
+	"tradepulse/internal/domain/rule"
 )
 
 var (
@@ -17,86 +19,118 @@ var (
 	ErrEmailTaken = errors.New("email already registered")
 )
 
-type Profile struct {
-	Watchlist             []string `json:"watchlist"`
-	EventTypes            []string `json:"event_types"` // empty = all types
-	Muted                 []string `json:"muted"`
-	VolumeSpikeThreshold  float64  `json:"volume_spike_threshold"`
-	PriceMoveThresholdPct float64  `json:"price_move_threshold_pct"`
-}
-
 const (
-	defaultVolumeThreshold = 2.0
-	defaultPriceThreshold  = 1.0
-	maxSymbols             = 200
+	KindEntity  = "entity"
+	KindKeyword = "keyword"
+	KindSource  = "source"
+
+	MaxSubscriptions = 200
+	MaxMuted         = 200
+	maxValueLen      = 100
 )
 
+type Subscription struct {
+	Kind       string           `json:"kind" enum:"entity,keyword,source" doc:"entity: matches event entities; keyword: whole-word phrase in title/summary; source: events from a source id"`
+	Value      string           `json:"value" minLength:"1" maxLength:"100"`
+	Types      []string         `json:"types,omitempty" maxItems:"20" doc:"Only these event types (empty = all types)"`
+	Conditions []rule.Condition `json:"conditions,omitempty" maxItems:"10" doc:"All conditions must hold for an item to be delivered"`
+}
+
+type Profile struct {
+	Subscriptions []Subscription `json:"subscriptions,omitempty" maxItems:"200"`
+	Muted         []string       `json:"muted,omitempty" maxItems:"200" doc:"Entities, sources or phrases that suppress matching items"`
+}
+
 func DefaultProfile() Profile {
-	return Profile{
-		Watchlist: []string{}, EventTypes: []string{}, Muted: []string{},
-		VolumeSpikeThreshold:  defaultVolumeThreshold,
-		PriceMoveThresholdPct: defaultPriceThreshold,
-	}
+	return Profile{Subscriptions: []Subscription{}, Muted: []string{}}
 }
 
-var symbolRe = regexp.MustCompile(`^[A-Z0-9&-]{1,20}$`)
-
-func normSymbols(in []string, field string) ([]string, error) {
-	if len(in) > maxSymbols {
-		return nil, fmt.Errorf("%s: at most %d entries", field, maxSymbols)
-	}
-	seen := make(map[string]struct{}, len(in))
-	out := make([]string, 0, len(in))
-	for _, s := range in {
-		s = strings.ToUpper(strings.TrimSpace(s))
-		if !symbolRe.MatchString(s) {
-			return nil, fmt.Errorf("%s: invalid symbol %q", field, s)
-		}
-		if _, dup := seen[s]; !dup {
-			seen[s] = struct{}{}
-			out = append(out, s)
+func printable(s string) bool {
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			return false
 		}
 	}
-	return out, nil
+	return true
 }
 
-// Normalize validates and canonicalizes a profile.
-func (p Profile) Normalize() (Profile, error) {
-	var err error
-	out := Profile{}
-	if out.Watchlist, err = normSymbols(p.Watchlist, "watchlist"); err != nil {
-		return Profile{}, err
+// Normalize validates and canonicalizes a profile against the event registry.
+func (p Profile) Normalize(reg *event.Registry) (Profile, error) {
+	if len(p.Subscriptions) > MaxSubscriptions {
+		return Profile{}, fmt.Errorf("at most %d subscriptions", MaxSubscriptions)
 	}
-	if out.Muted, err = normSymbols(p.Muted, "muted"); err != nil {
-		return Profile{}, err
+	if len(p.Muted) > MaxMuted {
+		return Profile{}, fmt.Errorf("at most %d muted entries", MaxMuted)
 	}
+	out := Profile{Subscriptions: make([]Subscription, 0, len(p.Subscriptions)), Muted: []string{}}
 	seen := map[string]struct{}{}
-	out.EventTypes = make([]string, 0, len(p.EventTypes))
-	for _, t := range p.EventTypes {
-		t = strings.ToLower(strings.TrimSpace(t))
-		if !event.IsKnown(t) {
-			return Profile{}, fmt.Errorf("event_types: unknown type %q", t)
+	for i, s := range p.Subscriptions {
+		ns, err := s.normalize(reg)
+		if err != nil {
+			return Profile{}, fmt.Errorf("subscriptions[%d]: %w", i, err)
 		}
-		if _, dup := seen[t]; !dup {
-			seen[t] = struct{}{}
-			out.EventTypes = append(out.EventTypes, t)
+		k := ns.Kind + "|" + ns.Value
+		if _, dup := seen[k]; dup {
+			continue
 		}
+		seen[k] = struct{}{}
+		out.Subscriptions = append(out.Subscriptions, ns)
 	}
-	out.VolumeSpikeThreshold = p.VolumeSpikeThreshold
-	if out.VolumeSpikeThreshold == 0 {
-		out.VolumeSpikeThreshold = defaultVolumeThreshold
-	}
-	if out.VolumeSpikeThreshold < 1 || out.VolumeSpikeThreshold > 100 {
-		return Profile{}, errors.New("volume_spike_threshold must be between 1 and 100")
-	}
-	out.PriceMoveThresholdPct = p.PriceMoveThresholdPct
-	if out.PriceMoveThresholdPct == 0 {
-		out.PriceMoveThresholdPct = defaultPriceThreshold
-	}
-	if out.PriceMoveThresholdPct < 0.05 || out.PriceMoveThresholdPct > 50 {
-		return Profile{}, errors.New("price_move_threshold_pct must be between 0.05 and 50")
+	mseen := map[string]struct{}{}
+	for _, m := range p.Muted {
+		if !printable(m) {
+			return Profile{}, errors.New("muted: control characters are not allowed")
+		}
+		nm := event.NormEntity(m)
+		if nm == "" || len(nm) > maxValueLen {
+			return Profile{}, fmt.Errorf("muted: value must be 1-%d characters", maxValueLen)
+		}
+		if _, dup := mseen[nm]; !dup {
+			mseen[nm] = struct{}{}
+			out.Muted = append(out.Muted, nm)
+		}
 	}
 	return out, nil
+}
+
+func (s Subscription) normalize(reg *event.Registry) (Subscription, error) {
+	if !printable(s.Value) {
+		return s, errors.New("value: control characters are not allowed")
+	}
+	s.Kind = strings.ToLower(strings.TrimSpace(s.Kind))
+	switch s.Kind {
+	case KindEntity, KindSource:
+		s.Value = event.NormEntity(s.Value)
+	case KindKeyword:
+		s.Value = event.Phrase(s.Value)
+	default:
+		return s, errors.New("kind must be entity, keyword or source")
+	}
+	if s.Value == "" || len(s.Value) > maxValueLen {
+		return s, fmt.Errorf("value must be 1-%d characters", maxValueLen)
+	}
+	if len(s.Types) > 20 {
+		return s, errors.New("at most 20 types")
+	}
+	types := make([]string, 0, len(s.Types))
+	tseen := map[string]struct{}{}
+	for _, t := range s.Types {
+		t = strings.ToLower(strings.TrimSpace(t))
+		if _, ok := reg.Get(t); !ok {
+			return s, fmt.Errorf("unknown event type %q", t)
+		}
+		if _, dup := tseen[t]; !dup {
+			tseen[t] = struct{}{}
+			types = append(types, t)
+		}
+	}
+	s.Types = types
+	conds, err := rule.Normalize(s.Conditions, reg.KindOf)
+	if err != nil {
+		return s, err
+	}
+	s.Conditions = conds
+	return s, nil
 }
 
 type User struct {

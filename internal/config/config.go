@@ -24,7 +24,7 @@ type Config struct {
 	MaxWSPerUser   int
 	DocsEnabled    bool
 
-	SimEnabled  bool
+	SimDemo     string // market | status | none
 	SimSymbols  []string
 	SimInterval time.Duration
 }
@@ -53,7 +53,14 @@ func Load() (Config, error) {
 		return c, fmt.Errorf("RATE_LIMIT_BURST: %w", err)
 	}
 	c.TrustProxy = get("TRUST_PROXY", "false") == "true"
-	c.SimEnabled = get("SIM_ENABLED", "true") == "true"
+	demoDefault := "market"
+	if c.Production() {
+		demoDefault = "none"
+	}
+	c.SimDemo = get("SIM_DEMO", demoDefault)
+	if c.SimDemo != "market" && c.SimDemo != "status" && c.SimDemo != "none" {
+		return c, errors.New("SIM_DEMO must be market, status or none")
+	}
 	// Docs (/docs, /openapi.json) default ON in dev and OFF in production.
 	c.DocsEnabled = get("DOCS_ENABLED", strconv.FormatBool(!c.Production())) == "true"
 	if c.Production() && strings.HasPrefix(c.JWTSecret, "change-me") {

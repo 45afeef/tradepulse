@@ -13,17 +13,18 @@ import (
 	"syscall"
 	"time"
 
+	"tradepulse/examples/market"
+	"tradepulse/examples/status"
 	"tradepulse/internal/api"
 	"tradepulse/internal/auth"
 	"tradepulse/internal/config"
 	"tradepulse/internal/delivery"
-	"tradepulse/internal/domain/rule"
+	"tradepulse/internal/domain/event"
 	"tradepulse/internal/infrastructure/eventbus"
 	"tradepulse/internal/ingestion"
 	"tradepulse/internal/personalization"
 	"tradepulse/internal/processing"
 	"tradepulse/internal/source"
-	"tradepulse/internal/source/simulated"
 	"tradepulse/internal/storage/memory"
 )
 
@@ -49,20 +50,39 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Infrastructure (swap these for Postgres/Redis/NATS implementations later).
+	// Infrastructure (swap for Postgres/Redis/NATS implementations later).
 	bus := eventbus.NewMemory(1024, log)
 	users := memory.NewUserRepo()
 	feeds := memory.NewFeedRepo(200)
 	hub := delivery.NewHub(log, cfg.AllowedOrigins, cfg.MaxWSPerUser)
 
-	// Application: Events -> Signals -> Personalization -> Delivery.
-	engine := personalization.NewEngine(log, feeds, hub, rule.Default())
+	// Application: Events -> Matching -> Delivery.
+	reg := event.NewRegistry()
+	engine := personalization.NewEngine(log, feeds, hub, reg)
 	if err := engine.Load(ctx, users); err != nil {
 		return err
 	}
 	bus.Subscribe("personalization", engine.Handle)
-	detector := processing.NewUnusualActivityDetector(bus, 5*time.Minute, 10*time.Minute)
-	bus.Subscribe("signals", detector.Handle)
+
+	// Sources: an example domain chosen by SIM_DEMO (none in production).
+	var listeners []source.Listener
+	procs := map[string]processing.Processor{}
+	switch cfg.SimDemo {
+	case "market":
+		if err := market.RegisterTypes(reg); err != nil {
+			return err
+		}
+		listeners = append(listeners, market.NewSimulator(cfg.SimSymbols, cfg.SimInterval))
+		procs[market.SourceName] = market.NewNSETick(market.SourceName)
+		detector := market.NewUnusualActivityDetector(bus, 5*time.Minute, 10*time.Minute)
+		bus.Subscribe("signals", detector.Handle)
+	case "status":
+		if err := status.RegisterTypes(reg); err != nil {
+			return err
+		}
+		listeners = append(listeners, status.NewSimulator(cfg.SimInterval))
+		procs[status.SourceName] = status.NewProcessor()
+	}
 
 	jwt, err := auth.NewJWT(cfg.JWTSecret, "tradepulse", cfg.JWTTTL)
 	if err != nil {
@@ -73,7 +93,7 @@ func run() error {
 
 	apiSrv, err := api.New(api.Deps{
 		Cfg: cfg, Log: log, Users: users, Feeds: feeds, JWT: jwt,
-		Tickets: tickets, Personalizer: engine, Hub: hub,
+		Tickets: tickets, Personalizer: engine, Hub: hub, Registry: reg,
 	})
 	if err != nil {
 		return err
@@ -81,13 +101,11 @@ func run() error {
 	go apiSrv.Run(ctx)
 
 	var wg sync.WaitGroup
-	if cfg.SimEnabled {
-		listeners := []source.Listener{simulated.New(cfg.SimSymbols, cfg.SimInterval)}
-		procs := map[string]processing.Processor{simulated.Name: processing.NewNSETick(simulated.Name)}
+	if len(listeners) > 0 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			ingestion.Run(ctx, log, bus, listeners, procs)
+			ingestion.Run(ctx, log, bus, reg, listeners, procs)
 		}()
 	}
 
@@ -102,7 +120,7 @@ func run() error {
 	}
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("listening", "addr", cfg.Addr, "env", cfg.Env)
+		log.Info("listening", "addr", cfg.Addr, "env", cfg.Env, "demo", cfg.SimDemo)
 		if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
