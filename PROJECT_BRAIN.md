@@ -96,7 +96,7 @@ Priority: **P0** release blocker · **P1** important · **P2** later.
 - P0: passwords hashed with PBKDF2-SHA256 (or argon2/bcrypt if approved); HS256 JWT with strict header check (exists).
 - P0: registration requires a valid invite code: 128-bit random, **stored hashed**, single-use, expires (default 7 days), optional email binding, **atomic redeem** (race-tested).
 - P0: roles `admin|member`, status `active|suspended`; server-side checks on every protected operation; admin routes under `/api/v1/admin/*` return 403 to members.
-- P0: first admin created by CLI (`server admin create`), never by an open endpoint.
+- P0: first admin created at startup from `BOOTSTRAP_ADMIN_EMAIL`/`BOOTSTRAP_ADMIN_PASSWORD` (idempotent, never overwrites, never over HTTP) — D-015.
 - P0: login/registration rate-limited per IP **and** per account.
 - P1: refresh tokens (rotating, DB-stored, revocable, reuse detection), logout, password change, admin-triggered reset.
 - P1: session list/revocation.
@@ -369,7 +369,7 @@ Product: semantic versioning (MAJOR incompatible API/data, MINOR features, PATCH
 6. **TP-006** Subscriptions replace watchlist; move market example to `examples/` — M1
 7. **TP-007** Postgres + migrations + repositories + `/readyz` (ADR D-013) — M2
 8. **TP-008** Roles/status + invites (hashed, single-use, atomic redeem) — M2
-9. **TP-009** Admin API (invites/users/suspend), `adminctl` first admin, audit log — M2
+9. **TP-009** Admin API (invites/users/suspend), env-bootstrapped first admin, audit log — M2
 10. **TP-010** Safe fetcher (SSRF guard) with tests — M3 (**blocks all connectors**)
 11. **TP-011** Source model + admin CRUD + secret refs + run history + health — M3
 12. **TP-012** Raw store + dedupe + silence watchdog — M3

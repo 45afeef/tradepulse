@@ -39,8 +39,11 @@ Source → Listener → RawMessage → Processor → Event → event.Bus → (Si
 - WebSocket: tickets only (no JWT in URLs), origin check, size/time limits stay.
 - Don't weaken: rate limits, security headers/CSP, server timeouts, non-root distroless image.
 
+## API docs rule
+Every endpoint ships with documentation in the Huma registration (summary, description, tag, error codes) and field `doc`/`example` tags; `/docs` is the developer manual. `TestEveryOperationIsDocumented` fails otherwise. Update the overview in `internal/api/docs.go` when behavior visible to API users changes.
+
 ## Tracking (mandatory in every change)
-Add an entry to **`CHANGELOG.md`** (what/why/files/breaking/verification/next), update **`TESTING.md`** (new tests in the register + security matrix + verification log), tick **`BACKLOG.md`** items, and rewrite **"Current state & next action"** at the top of **`ROADMAP.md`** so the next session is unambiguous. Never mark ✅/Done unless the checks were actually run.
+Add an entry to **`CHANGELOG.md`** (what/why/files/breaking/verification/next, plus a suggested Conventional Commit message — the owner wants one with every change), update **`TESTING.md`** (new tests in the register + security matrix + verification log), tick **`BACKLOG.md`** items, and rewrite **"Current state & next action"** at the top of **`ROADMAP.md`** so the next session is unambiguous. Never mark ✅/Done unless the checks were actually run.
 
 ## Commands (Docker only; works on Windows/macOS/Linux)
 `docker compose up --build` (dev, hot reload, docs at :8080/docs) · `docker compose run --rm check` (vet+race tests; run before finishing) · `docker compose run --rm openapi` (regenerate openapi.json) · `docker compose run --rm tidy`. `make <dev|check|test|openapi|tidy>` are optional Unix aliases. Do not assume Go or make is installed on the host.

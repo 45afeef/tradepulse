@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -14,13 +15,19 @@ import (
 	"tradepulse/internal/config"
 	"tradepulse/internal/delivery"
 	"tradepulse/internal/domain/event"
+	"tradepulse/internal/domain/invite"
 	"tradepulse/internal/domain/user"
+	"tradepulse/internal/idgen"
 	"tradepulse/internal/storage/memory"
 )
 
 type nopPersonalizer struct{}
 
 func (nopPersonalizer) UpsertUser(string, user.Profile) {}
+func (nopPersonalizer) RemoveUser(string)               {}
+
+// lastServer lets helpers reach the repositories of the server under test (tests do not run in parallel).
+var lastServer *Server
 
 func newServer(t *testing.T, mutate func(*config.Config)) (*Server, http.Handler) {
 	t.Helper()
@@ -36,12 +43,15 @@ func newServer(t *testing.T, mutate func(*config.Config)) (*Server, http.Handler
 	}
 	s, err := New(Deps{
 		Cfg: cfg, Log: log, Users: memory.NewUserRepo(), Feeds: memory.NewFeedRepo(10), JWT: jwt,
+		Invites: memory.NewInviteRepo(), Audit: memory.NewAuditRepo(100),
 		Tickets: auth.NewTicketStore(time.Minute), Personalizer: nopPersonalizer{},
 		Hub: delivery.NewHub(log, nil, 2), Registry: event.NewRegistry(),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.authLim = newLimiter(1000, 1000) // rate-limit tests re-tighten this
+	lastServer = s
 	return s, s.Handler()
 }
 
@@ -56,9 +66,41 @@ func do(h http.Handler, method, path, token, body string) *httptest.ResponseReco
 	return rec
 }
 
+// inviteCode creates a valid single-use invite directly in the repository.
+func inviteCode(t *testing.T) string {
+	t.Helper()
+	code, hash, err := invite.NewCode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	err = lastServer.Invites.Create(context.Background(), invite.Invite{
+		ID: idgen.New(), CodeHash: hash, CreatedBy: "test", CreatedAt: now, ExpiresAt: now.Add(time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return code
+}
+
+// adminToken creates an admin account directly and returns a valid token for it.
+func adminToken(t *testing.T) (id, token string) {
+	t.Helper()
+	id = idgen.New()
+	err := lastServer.Users.Create(context.Background(), user.User{ID: id, Email: id + "@admin.example", Role: user.RoleAdmin,
+		Status: user.StatusActive, CreatedAt: time.Now().UTC(), Profile: user.DefaultProfile()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err = lastServer.JWT.Issue(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id, token
+}
+
 func register(t *testing.T, h http.Handler, email string) string {
 	t.Helper()
-	rec := do(h, http.MethodPost, "/api/v1/auth/register", "", `{"email":"`+email+`","password":"correct-horse-battery"}`)
+	rec := do(h, http.MethodPost, "/api/v1/auth/register", "", `{"email":"`+email+`","password":"correct-horse-battery","invite_code":"`+inviteCode(t)+`"}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("register %s: %d %s", email, rec.Code, rec.Body)
 	}
@@ -194,7 +236,8 @@ func TestLoginDoesNotRevealWhetherEmailExists(t *testing.T) {
 }
 
 func TestAuthEndpointsAreRateLimited(t *testing.T) {
-	_, h := newServer(t, nil)
+	s, h := newServer(t, nil)
+	s.authLim = newLimiter(0.2, 5)
 	limited := false
 	for i := 0; i < 8; i++ {
 		if do(h, "POST", "/api/v1/auth/login", "", `{"email":"x@example.com","password":"wrong-password-1"}`).Code == http.StatusTooManyRequests {
@@ -218,16 +261,16 @@ func TestOversizedBodyRejected(t *testing.T) {
 func TestRegisterValidationAndDuplicates(t *testing.T) {
 	_, h := newServer(t, nil)
 	for name, body := range map[string]string{
-		"short password": `{"email":"a@example.com","password":"short"}`,
-		"bad email":      `{"email":"not-an-email","password":"correct-horse-battery"}`,
-		"name in email":  `{"email":"Bob <b@example.com>","password":"correct-horse-battery"}`,
+		"short password": `{"invite_code":"tp_inv_0123456789","email":"a@example.com","password":"short"}`,
+		"bad email":      `{"invite_code":"tp_inv_0123456789","email":"not-an-email","password":"correct-horse-battery"}`,
+		"name in email":  `{"invite_code":"tp_inv_0123456789","email":"Bob <b@example.com>","password":"correct-horse-battery"}`,
 	} {
 		if rec := do(h, "POST", "/api/v1/auth/register", "", body); rec.Code < 400 || rec.Code >= 500 {
 			t.Errorf("%s: got %d, want 4xx", name, rec.Code)
 		}
 	}
 	register(t, h, "dup@example.com")
-	if rec := do(h, "POST", "/api/v1/auth/register", "", `{"email":"DUP@example.com","password":"correct-horse-battery"}`); rec.Code != http.StatusConflict {
+	if rec := do(h, "POST", "/api/v1/auth/register", "", `{"email":"DUP@example.com","password":"correct-horse-battery","invite_code":"`+inviteCode(t)+`"}`); rec.Code != http.StatusConflict {
 		t.Fatalf("duplicate email: got %d, want 409", rec.Code)
 	}
 }

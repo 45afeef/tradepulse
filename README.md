@@ -37,8 +37,9 @@ Then open **http://localhost:8080/docs** — interactive API docs (auto-listed e
 Raw spec: `http://localhost:8080/openapi.json`. Docs are **on in development, off in production** (`DOCS_ENABLED`).
 
 ### Manual test walkthrough (in /docs, Postman or curl)
-1. `POST /api/v1/auth/register` `{"email":"me@example.com","password":"a-long-password"}` → copy `token`.
-2. In /docs click **Auth/Authorize** → Bearer → paste token (Postman: Authorization → Bearer Token).
+0. **The API reference is the running `/docs` page** (overview, quick start, every endpoint with examples, WebSocket protocol, error format). New developers should start there.
+1. Registration is **invite-only**. In dev a first admin exists: `admin@example.com` / `dev-admin-password-change-me` (from `compose.yaml`; change via `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`). `POST /api/v1/auth/login` as admin → copy `token`.
+2. In /docs click **Authorize** → paste the token. `POST /api/v1/admin/invites` `{}` → copy the one-time `code`. Then `POST /api/v1/auth/register` `{"email":"me@example.com","password":"a-long-password","invite_code":"<code>"}` → the member `token`; authorize with that one for the steps below. (Postman: Authorization → Bearer Token.)
 3. `PUT /api/v1/me/subscriptions` — without subscriptions the feed is empty. Market demo (`SIM_DEMO=market`):
    `{"subscriptions":[{"kind":"entity","value":"RELIANCE","types":["volume_spike","unusual_activity"]},{"kind":"entity","value":"SBIN","conditions":[{"field":"abs_change_pct","op":">=","value":0.5}]}]}`
    Status demo (`SIM_DEMO=status`): `{"subscriptions":[{"kind":"source","value":"STATUS_SIM","conditions":[{"field":"status","op":"!=","value":"up"}]}]}`.
@@ -85,6 +86,11 @@ internal/storage/memory, internal/infrastructure/eventbus   replaceable implemen
 | `RATE_LIMIT_RPS` / `_BURST` | 20 / 40 | per IP; auth routes are stricter (~12/min) |
 | `SIM_DEMO` / `SIM_INTERVAL` / `SIM_SYMBOLS` | market (dev) or none (prod) / 2s / 10 symbols | example domain: `market`, `status`, `none` |
 | `ADDR`, `LOG_LEVEL` | :8080, info | |
+
+### Access control (invite-only)
+- Admin creates a single-use invite (optionally bound to an email, expiring in 7 days by default); the code is shown **once** and stored only as a hash.
+- Members register with the code. Suspending a member rejects their token at once, stops matching and closes their WebSockets. All admin actions are in the audit log (`GET /api/v1/admin/audit`).
+- First admin: set `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` (idempotent, never overwrites an existing account). In production set them from Secret Manager and remove them after the first start.
 
 ### Adding things
 Endpoint, source, event type, rule, storage: follow the checklist in [`AGENTS.md`](AGENTS.md). Endpoints are code-first: typed structs + `huma.Register` produce validation **and** docs; then regenerate the spec (`docker compose run --rm openapi`).

@@ -19,6 +19,7 @@ type ctxKey int
 const (
 	userKey ctxKey = iota
 	reqIDKey
+	roleKey
 )
 
 type statusRecorder struct {

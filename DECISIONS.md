@@ -16,6 +16,12 @@
 | D-012 | 2026-10-15 | MVP alert channels: in-app + outbound webhook; email later | "Never miss" needs an off-page channel; webhook covers Slack/Discord/Telegram cheaply | **Proposed** — owner to confirm |
 | D-013 | 2026-10-15 | pgx + a migration tool (goose vs golang-migrate) | Decide via ADR inside TP-007 | **Proposed** |
 | D-014 | 2026-10 | Frontend only after API freeze (M7) | Avoid rework | Decided |
+| D-015 | 2026-10-16 | First admin comes from `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` at startup (idempotent, never overwrites, never over HTTP) instead of a CLI | A CLI cannot persist with in-memory storage and is awkward on Cloud Run; env bootstrap works everywhere and keeps the secret in Secret Manager | Decided |
+| D-016 | 2026-10-16 | Access control (invites, roles, suspension, admin API, audit) is built against repository interfaces BEFORE Postgres (TP-007) | Verifiable without a DB; Postgres adapters implement the same interfaces next | Decided |
+| D-017 | 2026-10-16 | First X accounts: Donald Trump (@realDonaldTrump), Elon Musk (@elonmusk), Narendra Modi (@narendramodi); one news page URL still to come | Owner answer to Q-02; see `docs/sources/` | Decided (news URL pending) |
+| D-018 | 2026-10-16 | Owner declines to set an X budget: the platform ships a conservative default monthly spend cap (env-configurable, e.g. `X_MONTHLY_BUDGET_USD`) and stops polling when reached | Reliability/safety: a bug or popular account must never cause an unbounded bill; owner can raise it by env var without code changes | Decided |
+| D-019 | 2026-10-16 | GCP project/region are deploy-time environment configuration, never in code or docs; no owner input needed (Q-03 resolved) | Owner preference | Decided |
+| D-020 | 2026-10-16 | Every endpoint must be documented in /docs (summary, description, tag, errors); enforced by test | New developers learn the API from /docs | Decided |
 
 ## Open questions
-See `PROJECT_BRAIN.md` §17 (Q-02 exact sources, Q-03 GCP project/region/budgets + X budget, Q-05 extra channel, Q-07 latency, Q-08 retention, Q-09 name, Q-10 repo/CI, Q-11 beta size).
+Remaining: **Q-02 the one news page URL** (X handles received). See `PROJECT_BRAIN.md` §17 (Q-05 extra channel, Q-07 latency, Q-08 retention, Q-09 name, Q-10 repo/CI, Q-11 beta size).

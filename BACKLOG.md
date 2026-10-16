@@ -11,7 +11,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 - Tests: existing unit tests. Security/cost: none.
 
 ### TP-002 — WebSocket end-to-end test
-- Status: Proposed · P0 · M0 · Depends: TP-001
+- Status: Review (implemented in 0.3.0-dev; unverified — see CHANGELOG/TESTING) · P0 · M0 · Depends: TP-001
 - Acceptance:
   - [ ] test: register → set subscription/profile → ticket → WS connect → receives a feed item
   - [ ] ticket reuse and bad origin rejected
@@ -50,18 +50,18 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
   - [ ] `/readyz` checks DB; restart loses nothing
 
 ### TP-008 — Roles, status, invites
-- Status: Proposed · P0 · M2 · Depends: TP-007
+- Status: Review (implemented in 0.3.0-dev; unverified — see CHANGELOG/TESTING) · P0 · M2 · Depends: TP-007
 - Acceptance:
   - [ ] invites: 128-bit random, hashed at rest, single-use, expiry, optional email bind
   - [ ] concurrent redeem of one code succeeds exactly once (race test)
   - [ ] registration impossible without a valid code
   - [ ] suspended users rejected on API and WebSocket
 
-### TP-009 — Admin API, first-admin CLI, audit log
-- Status: Proposed · P0 · M2 · Depends: TP-008
+### TP-009 — Admin API, first-admin bootstrap, audit log
+- Status: Review (implemented in 0.3.0-dev; unverified — see CHANGELOG/TESTING) · P0 · M2 · Depends: TP-008
 - Acceptance:
   - [ ] `/admin/*` returns 403 for members; every admin action audited
-  - [ ] first admin only via CLI; per-account login throttling
+  - [ ] first admin only via startup bootstrap env (D-015); per-account login throttling (follow-up)
 
 ### TP-010 — Safe fetcher (SSRF guard)
 - Status: Proposed · P0 · M3 · Depends: TP-009 · **Blocks every connector and outbound webhook**
@@ -97,3 +97,13 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
   - [ ] polling stops at cap and raises an admin health alert; spend metric
   - [ ] token from Secret Manager; never logged
 - Stop condition: paid credentials needed → ask owner.
+
+### TP-017 — API documentation inside /docs
+- Status: Review (implemented in 0.3.0-dev; unverified) · P0 · M2
+- Goal: a new developer can understand and use the API from `/docs` alone.
+- Acceptance:
+  - [x] overview with quick start, auth, subscriptions guide, WebSocket protocol, errors, admin flow
+  - [x] every operation has summary, description, tag, error codes; tags described
+  - [x] enforced by `TestEveryOperationIsDocumented` / `TestAdminOperationsDeclareSecurity`
+  - [ ] visually confirmed in the running /docs page (owner)
+- Rule going forward: new endpoints are not "done" without docs text (see AGENTS.md).

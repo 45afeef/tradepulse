@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
 	"tradepulse/internal/domain/feed"
 )
@@ -108,7 +109,8 @@ func TestWriteFrameEncoding(t *testing.T) {
 }
 
 func newTestClient(user string, buf int) *client {
-	c1, _ := net.Pipe()
+	c1, c2 := net.Pipe()
+	go func() { _, _ = io.Copy(io.Discard, c2) }() // keep writes from blocking
 	return &client{userID: user, conn: c1, send: make(chan []byte, buf), done: make(chan struct{})}
 }
 
@@ -149,5 +151,23 @@ func TestShutdownRejectsNewConnections(t *testing.T) {
 	h.Shutdown()
 	if h.register(newTestClient("u", 1)) {
 		t.Fatal("registration accepted after shutdown")
+	}
+}
+
+func TestDisconnectUserClosesOnlyThatUsersConnections(t *testing.T) {
+	h := NewHub(discardLog(), nil, 5)
+	alice, bob := newTestClient("alice", 1), newTestClient("bob", 1)
+	h.register(alice)
+	h.register(bob)
+	h.DisconnectUser("alice")
+	select {
+	case <-alice.done:
+	case <-time.After(time.Second):
+		t.Fatal("alice not disconnected")
+	}
+	select {
+	case <-bob.done:
+		t.Fatal("bob must stay connected")
+	default:
 	}
 }

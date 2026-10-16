@@ -13,6 +13,7 @@ import (
 	"tradepulse/internal/auth"
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/feed"
+	"tradepulse/internal/domain/invite"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
 )
@@ -31,6 +32,13 @@ type credentialsBody struct {
 	Password string `json:"password" minLength:"10" maxLength:"128" example:"a-long-password"`
 }
 type credentialsIn struct{ Body credentialsBody }
+
+type registerBody struct {
+	Email      string `json:"email" maxLength:"254" example:"member@example.com"`
+	Password   string `json:"password" minLength:"10" maxLength:"128" example:"a-long-password"`
+	InviteCode string `json:"invite_code" minLength:"10" maxLength:"128" example:"tp_inv_AbCdEf0123456789" doc:"Single-use code from an administrator"`
+}
+type registerIn struct{ Body registerBody }
 
 type publicUser struct {
 	ID        string    `json:"id"`
@@ -80,27 +88,42 @@ func (s *Server) tokenFor(u user.User) (*tokenOut, error) {
 	return &tokenOut{Body: tokenBody{Token: tok, User: publicUser{ID: u.ID, Email: u.Email, CreatedAt: u.CreatedAt}}}, nil
 }
 
-func (s *Server) signup(ctx context.Context, in *credentialsIn) (*tokenOut, error) {
+func (s *Server) signup(ctx context.Context, in *registerIn) (*tokenOut, error) {
 	raw := strings.TrimSpace(in.Body.Email)
 	addr, err := mail.ParseAddress(raw)
 	if err != nil || addr.Address != raw || len(raw) > 254 {
 		return nil, huma.Error422UnprocessableEntity("a valid email is required")
 	}
+	email := strings.ToLower(raw)
+	uid := idgen.New()
+	// Redeem first (cheap) so invalid codes cannot make us burn CPU hashing passwords.
+	inv, err := s.Invites.Redeem(ctx, invite.HashCode(strings.TrimSpace(in.Body.InviteCode)), email, uid, time.Now().UTC())
+	if err != nil {
+		if !errors.Is(err, invite.ErrInvalid) {
+			s.Log.Error("redeem invite", "err", err)
+			return nil, huma.Error500InternalServerError("internal server error")
+		}
+		return nil, huma.Error403Forbidden("invalid or expired invite code")
+	}
+	release := func() { _ = s.Invites.Release(ctx, inv.ID, uid) }
 	hash, err := auth.HashPassword(in.Body.Password)
 	if err != nil {
+		release()
 		return nil, huma.Error500InternalServerError("could not process password")
 	}
 	u := user.User{
-		ID: idgen.New(), Email: strings.ToLower(raw), PasswordHash: hash,
-		CreatedAt: time.Now().UTC(), Profile: user.DefaultProfile(),
+		ID: uid, Email: email, PasswordHash: hash, CreatedAt: time.Now().UTC(),
+		Profile: user.DefaultProfile(), Role: user.RoleMember, Status: user.StatusActive,
 	}
 	if err := s.Users.Create(ctx, u); err != nil {
+		release() // do not burn the invite when registration fails
 		if errors.Is(err, user.ErrEmailTaken) {
 			return nil, huma.Error409Conflict("email already registered")
 		}
 		s.Log.Error("create user", "err", err)
 		return nil, huma.Error500InternalServerError("internal server error")
 	}
+	s.record(ctx, uid, "user.register", "user", uid, "invite "+inv.ID)
 	return s.tokenFor(u)
 }
 
@@ -112,6 +135,9 @@ func (s *Server) login(ctx context.Context, in *credentialsIn) (*tokenOut, error
 	}
 	if !auth.VerifyPassword(in.Body.Password, hash) || err != nil {
 		return nil, huma.Error401Unauthorized("invalid email or password")
+	}
+	if u.Status != user.StatusActive {
+		return nil, huma.Error403Forbidden("account suspended")
 	}
 	return s.tokenFor(u)
 }
@@ -161,6 +187,10 @@ func (s *Server) wsTicket(ctx context.Context, _ *struct{}) (*ticketOut, error) 
 func (s *Server) ws(w http.ResponseWriter, r *http.Request) {
 	uid, ok := s.Tickets.Redeem(r.URL.Query().Get("ticket"))
 	if !ok {
+		http.Error(w, "invalid or expired ticket", http.StatusUnauthorized)
+		return
+	}
+	if u, err := s.Users.GetByID(r.Context(), uid); err != nil || u.Status != user.StatusActive {
 		http.Error(w, "invalid or expired ticket", http.StatusUnauthorized)
 		return
 	}

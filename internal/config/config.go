@@ -24,6 +24,10 @@ type Config struct {
 	MaxWSPerUser   int
 	DocsEnabled    bool
 
+	// Optional first-admin bootstrap (idempotent; remove from env after first start).
+	BootstrapAdminEmail    string
+	BootstrapAdminPassword string
+
 	SimDemo     string // market | status | none
 	SimSymbols  []string
 	SimInterval time.Duration
@@ -63,6 +67,14 @@ func Load() (Config, error) {
 	}
 	// Docs (/docs, /openapi.json) default ON in dev and OFF in production.
 	c.DocsEnabled = get("DOCS_ENABLED", strconv.FormatBool(!c.Production())) == "true"
+	c.BootstrapAdminEmail = strings.TrimSpace(os.Getenv("BOOTSTRAP_ADMIN_EMAIL"))
+	c.BootstrapAdminPassword = os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
+	if (c.BootstrapAdminEmail == "") != (c.BootstrapAdminPassword == "") {
+		return c, errors.New("BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD must be set together")
+	}
+	if c.BootstrapAdminPassword != "" && len(c.BootstrapAdminPassword) < 12 {
+		return c, errors.New("BOOTSTRAP_ADMIN_PASSWORD must be at least 12 characters")
+	}
 	if c.Production() && strings.HasPrefix(c.JWTSecret, "change-me") {
 		return c, errors.New("JWT_SECRET is still the placeholder value")
 	}

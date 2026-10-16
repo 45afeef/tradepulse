@@ -20,6 +20,14 @@ var (
 )
 
 const (
+	RoleAdmin  = "admin"
+	RoleMember = "member"
+
+	StatusActive    = "active"
+	StatusSuspended = "suspended"
+)
+
+const (
 	KindEntity  = "entity"
 	KindKeyword = "keyword"
 	KindSource  = "source"
@@ -139,6 +147,8 @@ type User struct {
 	PasswordHash string
 	CreatedAt    time.Time
 	Profile      Profile
+	Role         string // RoleAdmin | RoleMember
+	Status       string // StatusActive | StatusSuspended
 }
 
 type Repository interface {
@@ -146,5 +156,6 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (User, error)
 	GetByEmail(ctx context.Context, email string) (User, error)
 	UpdateProfile(ctx context.Context, id string, p Profile) error
+	SetStatus(ctx context.Context, id, status string) error
 	List(ctx context.Context) ([]User, error)
 }

@@ -1,0 +1,73 @@
+package api
+
+import "strings"
+
+// Markdown shown at the top of /docs (dev only). § stands for a backtick.
+const overviewRaw = `
+**TradePulse** collects information from many sources, normalizes it into *events*, and delivers
+**the items relevant to you** in one live feed, with automatic alerts. Access is **invite-only**.
+
+## Quick start (5 minutes)
+1. **Get an invite code** from an administrator (looks like §tp_inv_…§). Codes are single-use and expire.
+2. §POST /api/v1/auth/register§ with your email, a password (10+ characters) and the invite code. The response contains a **token**.
+3. Click **Authorize** in this page (or send §Authorization: Bearer <token>§ on every request).
+4. §GET /api/v1/event-types§ shows what kinds of events exist and **which fields you can filter on**.
+5. §PUT /api/v1/me/subscriptions§ tells the system what you care about (see *Subscriptions* below). **Until you subscribe, your feed is empty.**
+6. §GET /api/v1/me/feed§ returns recent items. For live delivery: §POST /api/v1/ws-ticket§, then open the WebSocket (see *Real-time*).
+
+## Authentication
+- Register or log in to get a JWT; send it as §Authorization: Bearer <token>§.
+- Tokens expire (default 12 h); log in again to get a new one.
+- A **suspended** account is rejected everywhere immediately and its live connections are closed.
+- Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see §Retry-After§).
+
+## Subscriptions (what you receive)
+A subscription says *what to watch*; optional **types** and **conditions** narrow it. An item is delivered if **any** subscription matches, unless it is **muted**.
+
+| kind | matches when |
+|---|---|
+| §entity§ | the event lists that entity (case-insensitive), e.g. §tcs§, §checkout§ |
+| §keyword§ | the whole word/phrase appears in the item's title or text, e.g. §repo rate§ |
+| §source§ | the event comes from that source id, e.g. §status_sim§ |
+
+**Conditions** are §field operator value§ checks; **all** must hold. Operators: §>§ §>=§ §<§ §<=§ §==§ §!=§ §in§ §contains§ §any_of§.
+Fields come from §GET /api/v1/event-types§ (built-in: §type§, §source§, §title§, §summary§, §url§, §entity§; plus each type's own fields).
+If an event does not have the field, the condition is simply *false*.
+
+Example: notify me when *checkout* is anything other than up:
+§§§json
+{"subscriptions":[{"kind":"entity","value":"checkout","conditions":[{"field":"status","op":"!=","value":"up"}]}],
+ "muted":["maintenance"]}
+§§§
+Every delivered item has a **reason** explaining which subscription matched.
+
+## Real-time (WebSocket)
+1. §POST /api/v1/ws-ticket§ (with your token) → a **one-time ticket valid for 30 seconds**.
+2. Connect to §ws(s)://<host>/ws?ticket=<ticket>§ (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.
+3. Messages are JSON text frames:
+§§§json
+{"type":"connected"}
+{"type":"feed_item","data":{"id":"…","title":"checkout is down","body":"Latency 950 ms","severity":"notable","reason":"Matched your entity subscription \"checkout\"","created_at":"…"}}
+§§§
+4. **Reconnect with backoff** when the connection drops (deploys and idle limits close connections). After reconnecting, call §GET /api/v1/me/feed§ to catch up on anything missed.
+5. Limits: at most 5 simultaneous connections per user; slow readers are disconnected. Close code 1008 = policy (cap/suspended), 1001 = server going away.
+The WebSocket cannot be tried from this page; use a client such as Postman or §websocat§.
+
+## Errors
+Errors use **RFC 9457 problem JSON**: §{"title":"Unauthorized","status":401,"detail":"…"}§. Validation failures (422) list the offending fields.
+Common codes: §401§ missing/invalid token · §403§ not allowed (e.g. not an admin, bad invite) · §409§ conflict · §422§ invalid input · §429§ rate limited · §413§ body too large.
+
+## Administrators
+Endpoints under **admin** require the §admin§ role (others get 403). Typical flow: create an invite → share the code → watch its status → suspend/reactivate members → review the audit log.
+`
+
+var overview = strings.ReplaceAll(overviewRaw, "§", "`")
+
+const (
+	tagOps      = "Health probes for load balancers and monitoring. No authentication."
+	tagAuth     = "Create an account (invite required) and log in. Rate limited per IP."
+	tagMe       = "Your own data: subscriptions (what you receive) and your feed history. Requires a bearer token."
+	tagCatalog  = "Discover event types and the fields usable in subscription conditions."
+	tagRealtime = "Live delivery over WebSocket. Get a one-time ticket here, then connect to /ws."
+	tagAdmin    = "Administrator-only: invites, members and the audit log. Every action is audited."
+)

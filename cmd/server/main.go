@@ -15,6 +15,7 @@ import (
 
 	"tradepulse/examples/market"
 	"tradepulse/examples/status"
+	"tradepulse/internal/access"
 	"tradepulse/internal/api"
 	"tradepulse/internal/auth"
 	"tradepulse/internal/config"
@@ -54,7 +55,17 @@ func run() error {
 	bus := eventbus.NewMemory(1024, log)
 	users := memory.NewUserRepo()
 	feeds := memory.NewFeedRepo(200)
+	invites := memory.NewInviteRepo()
+	audits := memory.NewAuditRepo(10000)
 	hub := delivery.NewHub(log, cfg.AllowedOrigins, cfg.MaxWSPerUser)
+
+	if cfg.BootstrapAdminEmail != "" {
+		created, err := access.EnsureAdmin(ctx, users, cfg.BootstrapAdminEmail, cfg.BootstrapAdminPassword)
+		if err != nil {
+			return fmt.Errorf("bootstrap admin: %w", err)
+		}
+		log.Info("bootstrap admin checked", "created", created) // never log credentials
+	}
 
 	// Application: Events -> Matching -> Delivery.
 	reg := event.NewRegistry()
@@ -92,7 +103,7 @@ func run() error {
 	go tickets.Run(ctx)
 
 	apiSrv, err := api.New(api.Deps{
-		Cfg: cfg, Log: log, Users: users, Feeds: feeds, JWT: jwt,
+		Cfg: cfg, Log: log, Users: users, Feeds: feeds, Invites: invites, Audit: audits, JWT: jwt,
 		Tickets: tickets, Personalizer: engine, Hub: hub, Registry: reg,
 	})
 	if err != nil {

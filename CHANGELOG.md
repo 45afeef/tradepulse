@@ -6,6 +6,63 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.3.0-dev] — 2026-10-16 — Invite-only access, roles, admin API, audit, API docs (TP-002, TP-008, TP-009, TP-017)
+**Verification:** ⚠️ not compiled or run (no Go toolchain in the authoring sandbox). Run `docker compose run --rm check` first.
+**Suggested commit message:**
+```
+feat(access): invite-only registration, roles, suspension, admin API, audit log
+
+- registration requires a single-use, expiring, hashed invite code (atomic redeem, optional email binding)
+- roles (admin/member) and status (active/suspended); auth middleware re-checks the user on every request
+- suspension rejects tokens at once, stops matching and closes WebSockets
+- admin API: invites, users, audit; first admin via BOOTSTRAP_ADMIN_* env
+- /docs overview + per-operation docs, enforced by test; WebSocket end-to-end test
+- 27 new tests (22 security)
+```
+
+### Why
+Product gate for the private beta: only invited people may join, admins must be able to remove access instantly, and every admin action must be traceable. New developers must be able to learn the API from `/docs`.
+
+### Added
+- **Invites** (`domain/invite`): 192-bit random codes (`tp_inv_…`), stored only as SHA-256, single-use, expiring (default 7 d, max 30 d), optional email binding, atomic `Redeem`, `Release` on failed registration, `Revoke` (pending only). Generic errors (no oracle).
+- **Roles/status** on `User` (`admin|member`, `active|suspended`); `UserRepository.SetStatus`.
+- **Auth middleware** now loads the user per request (suspension/role changes are immediate); suspended/unknown ⇒ 401, non-admin on admin route ⇒ 403. `/ws` also checks status.
+- **Admin API** (`/api/v1/admin/*`): create/list/revoke invites, list users, suspend/reactivate (self-suspend blocked), audit log.
+- **Audit log** (`domain/audit`): registrations, invite create/revoke, suspend/reactivate; never contains secrets.
+- **First admin bootstrap** (`internal/access`): `BOOTSTRAP_ADMIN_EMAIL` + `BOOTSTRAP_ADMIN_PASSWORD` (>= 12 chars), idempotent, never overwrites (D-015). Dev defaults in `compose.yaml`.
+- **Engine/Hub:** `Engine.RemoveUser` used on suspension; `Hub.DisconnectUser` closes a user's sockets.
+- **Docs in /docs (TP-017):** overview (quick start, auth, subscriptions, WebSocket protocol, errors, admin), described tags, per-operation descriptions and error codes, field examples. Enforced by `TestEveryOperationIsDocumented`.
+- **TP-002:** real-server WebSocket end-to-end test (handshake, live item, history, close on suspension).
+- Docs: `docs/sources/x-accounts.md`, `docs/sources/news-page.md`; decisions D-015…D-020.
+
+### Changed (⚠️ breaking vs 0.2.0-dev)
+| Area | Before | After |
+|---|---|---|
+| `POST /auth/register` | email + password | email + password + **`invite_code`** (403 on invalid) |
+| `POST /auth/login` | 401 on bad credentials | + **403** for suspended accounts |
+| Private routes | valid JWT is enough | JWT **and** an active account (loaded each request) |
+| `api.Deps` | no invites/audit | `Invites`, `Audit` required |
+| `api.Personalizer` | `UpsertUser` | + `RemoveUser` |
+| Config | — | `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` (both or neither; password >= 12) |
+| Dev flow | register directly | login as bootstrap admin → create invite → register |
+
+### Security notes
+Codes never stored or logged in plaintext; list endpoints expose neither codes nor hashes nor password hashes; failed registration releases the invite only for the same user; per-request user check prevents "valid token, removed account"; admin lock-out guard; audit trail for admin actions. Auth endpoints remain rate limited.
+
+### Known limitations / open items
+- Storage is still in memory: users, invites and audit are lost on restart (TP-007 Postgres next). Bootstrap admin is recreated on each start (idempotent).
+- Per-account login throttling/lockout not yet implemented (only per-IP).
+- Feed catch-up uses the latest N items; cursor pagination comes with the API freeze (M7).
+- Source work (news page, X accounts) waits for TP-010 (safe fetcher) and the news URL.
+
+### Files (main)
+`internal/domain/{invite,audit,user}` · `internal/storage/memory/repos.go` · `internal/access/access.go` · `internal/api/{server,admin,authmw,docs,handlers}.go` · `internal/delivery/hub.go` · `internal/config/config.go` · `cmd/server/main.go` · `compose.yaml` · tests (`*_test.go`) · `TESTING.md` · `docs/sources/*` · `DECISIONS.md`
+
+### Next
+TP-001 (first green `check`) → TP-007 Postgres → TP-010 safe fetcher → TP-013/014/015 sources → TP-016 X connector.
+
+---
+
 ## [0.2.0-dev] — 2026-10-16 — M1 Generic core (TP-004, TP-005, TP-006)
 **Verification:** ⚠️ not compiled or run (no Go toolchain in the authoring sandbox). First step: `docker compose run --rm check`; paste errors for a fix pass.
 

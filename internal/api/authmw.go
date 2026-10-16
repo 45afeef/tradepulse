@@ -5,10 +5,14 @@ import (
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
+
+	"tradepulse/internal/domain/user"
 )
 
-// authMiddleware validates the Bearer JWT and stores the user ID in the context.
-func (s *Server) authMiddleware(api huma.API) func(huma.Context, func(huma.Context)) {
+// authMiddleware validates the Bearer JWT, then loads the user on EVERY request so
+// suspension and role changes take effect immediately. Suspended or unknown users
+// get the same 401 as an invalid token. adminOnly additionally requires role admin.
+func (s *Server) authMiddleware(api huma.API, adminOnly bool) func(huma.Context, func(huma.Context)) {
 	const prefix = "Bearer "
 	return func(ctx huma.Context, next func(huma.Context)) {
 		h := ctx.Header("Authorization")
@@ -21,6 +25,15 @@ func (s *Server) authMiddleware(api huma.API) func(huma.Context, func(huma.Conte
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}
-		next(huma.WithValue(ctx, userKey, claims.Sub))
+		u, err := s.Users.GetByID(ctx.Context(), claims.Sub)
+		if err != nil || u.Status != user.StatusActive {
+			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		if adminOnly && u.Role != user.RoleAdmin {
+			_ = huma.WriteErr(api, ctx, http.StatusForbidden, "administrator access required")
+			return
+		}
+		next(huma.WithValue(huma.WithValue(ctx, userKey, u.ID), roleKey, u.Role))
 	}
 }

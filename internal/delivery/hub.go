@@ -100,3 +100,17 @@ func (h *Hub) Shutdown() {
 		c.close()
 	}
 }
+
+// DisconnectUser closes every live connection of a user (e.g. on suspension).
+func (h *Hub) DisconnectUser(userID string) {
+	h.mu.RLock()
+	var cs []*client
+	for c := range h.clients[userID] {
+		cs = append(cs, c)
+	}
+	h.mu.RUnlock()
+	for _, c := range cs {
+		_ = c.writeFrame(opClose, []byte{0x03, 0xf0}) // 1008 policy violation
+		c.close()
+	}
+}

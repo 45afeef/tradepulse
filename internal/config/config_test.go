@@ -7,7 +7,7 @@ import (
 
 func baseEnv(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{"APP_ENV", "DOCS_ENABLED", "SIM_DEMO", "TRUST_PROXY", "JWT_TTL", "SIM_INTERVAL", "LOG_LEVEL"} {
+	for _, k := range []string{"APP_ENV", "DOCS_ENABLED", "SIM_DEMO", "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "TRUST_PROXY", "JWT_TTL", "SIM_INTERVAL", "LOG_LEVEL"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("JWT_SECRET", strings.Repeat("s", 40))
@@ -58,5 +58,22 @@ func TestInvalidSimDemoRejected(t *testing.T) {
 	t.Setenv("SIM_DEMO", "bogus")
 	if _, err := Load(); err == nil {
 		t.Fatal("invalid SIM_DEMO accepted")
+	}
+}
+
+func TestBootstrapAdminMustBeCompleteAndStrong(t *testing.T) {
+	baseEnv(t)
+	t.Setenv("BOOTSTRAP_ADMIN_EMAIL", "admin@example.com")
+	t.Setenv("BOOTSTRAP_ADMIN_PASSWORD", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("email without password accepted")
+	}
+	t.Setenv("BOOTSTRAP_ADMIN_PASSWORD", "short")
+	if _, err := Load(); err == nil {
+		t.Fatal("weak bootstrap password accepted")
+	}
+	t.Setenv("BOOTSTRAP_ADMIN_PASSWORD", "a-strong-password-1")
+	if c, err := Load(); err != nil || c.BootstrapAdminEmail != "admin@example.com" {
+		t.Fatalf("valid bootstrap rejected: %v", err)
 	}
 }
