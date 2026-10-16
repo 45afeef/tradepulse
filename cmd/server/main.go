@@ -20,6 +20,10 @@ import (
 	"tradepulse/internal/auth"
 	"tradepulse/internal/config"
 	"tradepulse/internal/delivery"
+	"tradepulse/internal/domain/audit"
+	"tradepulse/internal/domain/feed"
+	"tradepulse/internal/domain/invite"
+	"tradepulse/internal/domain/user"
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/infrastructure/eventbus"
 	"tradepulse/internal/ingestion"
@@ -27,6 +31,7 @@ import (
 	"tradepulse/internal/processing"
 	"tradepulse/internal/source"
 	"tradepulse/internal/storage/memory"
+	"tradepulse/internal/storage/postgres"
 )
 
 func main() {
@@ -51,12 +56,41 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Infrastructure (swap for Postgres/Redis/NATS implementations later).
+	// Infrastructure. Storage comes from DATABASE_URL (any managed Postgres); without it
+	// (development only) data lives in memory and is lost on restart.
 	bus := eventbus.NewMemory(1024, log)
-	users := memory.NewUserRepo()
-	feeds := memory.NewFeedRepo(200)
-	invites := memory.NewInviteRepo()
-	audits := memory.NewAuditRepo(10000)
+	var (
+		users   user.Repository
+		feeds   feed.Repository
+		invites invite.Repository
+		audits  audit.Repository
+		ready   func(context.Context) error
+	)
+	if cfg.DatabaseURL != "" {
+		mig, err := postgres.Open(ctx, cfg.DatabaseMigrationURL, 2, cfg.DBSimpleProtocol)
+		if err != nil {
+			return fmt.Errorf("database (migrations): %w", err)
+		}
+		err = postgres.Migrate(ctx, mig, log)
+		mig.Close()
+		if err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+		pool, err := postgres.Open(ctx, cfg.DatabaseURL, cfg.DBMaxConns, cfg.DBSimpleProtocol)
+		if err != nil {
+			return fmt.Errorf("database: %w", err)
+		}
+		defer pool.Close()
+		users, feeds = postgres.NewUserRepo(pool), postgres.NewFeedRepo(pool)
+		invites, audits = postgres.NewInviteRepo(pool), postgres.NewAuditRepo(pool)
+		ready = pool.Ping
+		go postgres.RunRetention(ctx, pool, log, 1000, 365*24*time.Hour)
+		log.Info("storage: postgres")
+	} else {
+		users, feeds = memory.NewUserRepo(), memory.NewFeedRepo(200)
+		invites, audits = memory.NewInviteRepo(), memory.NewAuditRepo(10000)
+		log.Warn("storage: in-memory (development only; data is lost on restart)")
+	}
 	hub := delivery.NewHub(log, cfg.AllowedOrigins, cfg.MaxWSPerUser)
 
 	if cfg.BootstrapAdminEmail != "" {
@@ -104,7 +138,7 @@ func run() error {
 
 	apiSrv, err := api.New(api.Deps{
 		Cfg: cfg, Log: log, Users: users, Feeds: feeds, Invites: invites, Audit: audits, JWT: jwt,
-		Tickets: tickets, Personalizer: engine, Hub: hub, Registry: reg,
+		Tickets: tickets, Personalizer: engine, Hub: hub, Registry: reg, Ready: ready,
 	})
 	if err != nil {
 		return err

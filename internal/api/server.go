@@ -39,6 +39,8 @@ type Deps struct {
 	Personalizer Personalizer
 	Hub          *delivery.Hub
 	Registry     *event.Registry
+	// Ready (optional) checks dependencies for /readyz, e.g. the database ping.
+	Ready func(ctx context.Context) error
 }
 
 type Server struct {
@@ -96,7 +98,8 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 	huma.Register(api, huma.Operation{OperationID: "health", Method: http.MethodGet, Path: "/healthz", Tags: []string{"ops"},
 		Summary: "Liveness probe", Description: "Returns 200 while the process is running."}, s.health)
 	huma.Register(api, huma.Operation{OperationID: "ready", Method: http.MethodGet, Path: "/readyz", Tags: []string{"ops"},
-		Summary: "Readiness probe", Description: "Returns 200 when the service can accept traffic."}, s.health)
+		Summary: "Readiness probe", Errors: []int{503},
+		Description: "Returns 200 when the service can accept traffic: the database (if configured) answers a ping. 503 otherwise."}, s.ready)
 
 	huma.Register(api, huma.Operation{OperationID: "signup", Method: http.MethodPost, Path: "/api/v1/auth/register", Tags: []string{"auth"},
 		Summary: "Create an account with an invite code", DefaultStatus: http.StatusCreated, MaxBodyBytes: small,

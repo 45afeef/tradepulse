@@ -80,6 +80,18 @@ func (s *Server) health(_ context.Context, _ *struct{}) (*statusOut, error) {
 	return &statusOut{Body: statusBody{Status: "ok"}}, nil
 }
 
+func (s *Server) ready(ctx context.Context, _ *struct{}) (*statusOut, error) {
+	if s.Ready != nil {
+		cctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		if err := s.Ready(cctx); err != nil {
+			s.Log.Warn("readiness check failed", "err", err)
+			return nil, huma.Error503ServiceUnavailable("a dependency is unavailable") // no driver details to clients
+		}
+	}
+	return &statusOut{Body: statusBody{Status: "ok"}}, nil
+}
+
 func (s *Server) tokenFor(u user.User) (*tokenOut, error) {
 	tok, err := s.JWT.Issue(u.ID)
 	if err != nil {

@@ -2,7 +2,7 @@
 Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-down; one item at a time.
 
 ### TP-001 — Baseline green
-- Status: In Progress (waiting on first `check` run by owner) · Priority: P0 · Milestone: M0
+- Status: Done (owner confirmed on Windows 11, 2026-10-17; `openapi.json`/`go.sum` commit is the owner's)
 - Goal: code compiles and checks pass from a clean clone on Windows and Linux.
 - Acceptance:
   - [ ] `docker compose run --rm check` passes
@@ -20,7 +20,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 - Status: Done · P0 · M0 — charter, decisions, roadmap, backlog, changelog in repo; AGENTS.md points to them.
 
 ### TP-004 — Event type registry + generic Event
-- Status: Review (implemented in 0.2.0-dev; unverified — see CHANGELOG/TESTING) · P0 · M1 · Depends: TP-001
+- Status: Done (M1 confirmed working by owner, 2026-10-17)
 - Goal: types defined as data (id, payload schema, title/body templates); default `content_item`.
 - Acceptance:
   - [ ] no hardcoded market enum in core; unknown types rejected
@@ -28,7 +28,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 - Tests: registry validation, render templates.
 
 ### TP-005 — Field-condition rules + matching index
-- Status: Review (implemented in 0.2.0-dev; unverified — see CHANGELOG/TESTING) · P0 · M1 · Depends: TP-004
+- Status: Done (M1 confirmed working by owner, 2026-10-17)
 - Acceptance:
   - [ ] ops `> >= < <= == != in contains any_of` over whitelisted fields only
   - [ ] keyword/entity inverted index; events evaluated only against interested users
@@ -36,14 +36,14 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 - Security: no expression evaluation; bounded rule size.
 
 ### TP-006 — Subscriptions replace watchlist
-- Status: Review (implemented in 0.2.0-dev; unverified — see CHANGELOG/TESTING) · P0 · M1 · Depends: TP-005
+- Status: Done (M1 confirmed working by owner, 2026-10-17)
 - Acceptance:
   - [ ] subscriptions (source | keyword | entity) + mute; limits enforced
   - [ ] market simulator/rules moved to `examples/`; core has no domain terms
   - [ ] non-market demo works with zero core changes
 
 ### TP-007 — PostgreSQL + migrations
-- Status: Proposed · P0 · M2 · Depends: TP-006
+- Status: Review (implemented in 0.4.0-dev; not yet confirmed by running)
 - Acceptance:
   - [ ] ADR for pgx + migration tool; fresh DB migrates; up/down tested in CI
   - [ ] repositories behind existing interfaces; parameterized SQL only; compose `postgres` service
@@ -64,7 +64,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
   - [ ] first admin only via startup bootstrap env (D-015); per-account login throttling (follow-up)
 
 ### TP-010 — Safe fetcher (SSRF guard)
-- Status: Proposed · P0 · M3 · Depends: TP-009 · **Blocks every connector and outbound webhook**
+- Status: Review (implemented in 0.4.0-dev; not yet confirmed by running)
 - Acceptance:
   - [ ] http/https, ports 80/443; blocks loopback, RFC1918, link-local, 169.254.169.254, metadata.google.internal
   - [ ] DNS resolved and IP pinned; redirects re-validated (max 3); 10 s timeout; 2 MB cap
@@ -107,3 +107,25 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
   - [x] enforced by `TestEveryOperationIsDocumented` / `TestAdminOperationsDeclareSecurity`
   - [ ] visually confirmed in the running /docs page (owner)
 - Rule going forward: new endpoints are not "done" without docs text (see AGENTS.md).
+
+### TP-018 — Source scheduler with per-source intervals (Q-07, D-022)
+- Status: Proposed · P0 · M3 · Depends: TP-011
+- Acceptance:
+  - [ ] each source has `poll_interval_seconds` validated against `SOURCE_MIN/MAX_INTERVAL_SECONDS`
+  - [ ] scheduler runs sources independently (one slow source never delays another), with jitter and per-host rate limit
+  - [ ] adaptive back-off after unchanged responses/errors; next/last run visible in admin health
+  - [ ] fixture tests with a fake clock (no sleeping tests)
+
+### TP-019 — Channel abstraction + outbound webhook (Q-05, D-025)
+- Status: Proposed · P0 · M5 · Depends: TP-010, TP-005
+- Acceptance:
+  - [ ] `Channel` interface (`Send(ctx, userID, item)`), in-app and webhook implementations, registry by name
+  - [ ] webhook: HTTPS only via safefetch, HMAC-signed payload, retry with back-off, delivery history, auto-disable after repeated failures
+  - [ ] adding email/Telegram later requires no change to matching code
+
+### TP-020 — Deploy workflow (GitHub Actions → Cloud Run)
+- Status: Proposed · P1 · M6 · Depends: TP-007
+- Acceptance:
+  - [ ] manual-dispatch + tag-based workflow using Workload Identity Federation (no JSON keys)
+  - [ ] project/region/service from GitHub variables (`GCP_PROJECT_ID`, `GCP_REGION`, `CLOUD_RUN_SERVICE`), secrets from Secret Manager
+  - [ ] smoke test on `/readyz`; rollback = previous revision (documented)

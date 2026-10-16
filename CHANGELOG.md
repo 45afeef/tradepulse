@@ -6,6 +6,64 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.4.0-dev] — 2026-10-17 — PostgreSQL storage via env, migrations, readiness, safe fetcher (TP-007, TP-010) → M2 complete in code
+**Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox); owner has verified M0 and M1 (0.2.0-dev and earlier) on Windows 11. Run `docker compose run --rm check` (it now starts the local `postgres` service and runs the integration tests).
+**Suggested commit message:**
+```
+feat(storage): managed PostgreSQL via env, embedded migrations, readiness, SSRF-safe fetcher
+
+- pgx repositories for users, invites, audit, feed (parameterized SQL, atomic invite redeem)
+- embedded up/down migrations with advisory lock; RLS enabled on every table (Supabase-safe)
+- pooler-aware connection (pgbouncer/6543 -> simple protocol), separate migration URL, DB config by env only
+- /readyz checks the database; production requires DATABASE_URL; hourly retention job
+- internal/safefetch: SSRF guard (private/metadata IPs, DNS rebinding, redirects, size/time limits) + architecture test
+- config: source interval bounds, X credentials/budget, secret-redacting LogValue
+- compose: local postgres service; CI: postgres service; docs/DATABASE.md; sources docs for 3 news pages + X
+- 34 new tests (24 security)
+```
+
+### Why
+M2 exit criteria: restart-safe persistence and access control. The owner will run on a managed Postgres (Supabase free tier now, any provider later), so everything about the database is environment-driven and hardened for a provider that exposes an HTTP API over `public`. The safe fetcher is the prerequisite for every source connector (D-026).
+
+### Added
+- **`internal/storage/postgres`:** `UserRepo`, `InviteRepo`, `AuditRepo`, `FeedRepo` (pgx v5, parameterized SQL only). Invite `Redeem` is one atomic `UPDATE … RETURNING`. Case-insensitive unique email (`lower(email)` index). Feed ordered by a `bigserial` sequence.
+- **Embedded migrator** (`migrate.go`, D-013): numbered `.up.sql`/`.down.sql`, per-migration transaction, `schema_migrations`, advisory lock (safe with several instances), `MigrateDown` for tests/emergencies.
+- **Security of the schema:** `ENABLE ROW LEVEL SECURITY` on every table (including `schema_migrations`) and revoke from `anon`/`authenticated` if those roles exist (Supabase). Tests enforce it.
+- **Provider flexibility:** `DATABASE_URL`, `DATABASE_MIGRATION_URL` (session/direct connection for migrations), `DB_MAX_CONNS`, `DB_SIMPLE_PROTOCOL=auto|true|false` (auto: `pgbouncer=true` or port 6543 → simple protocol; the Prisma-style `pgbouncer` param is stripped). Errors never echo the URL.
+- **Readiness:** `/readyz` pings the database (503 with a generic message if down); `/healthz` stays independent.
+- **Retention:** hourly job keeps the newest 1,000 feed items per user and 365 days of audit log.
+- **Production guard:** server refuses to start in production without `DATABASE_URL`; without it in development, in-memory storage with a loud warning.
+- **`internal/safefetch`** (TP-010, D-026): http/https only, ports 80/443, no URL credentials, metadata/localhost/`.internal` hosts blocked, IP validated at dial time and the validated IP dialed (defeats DNS rebinding and redirect tricks), loopback/private/link-local/CGNAT/multicast/doc ranges and IPv4-mapped IPv6 blocked, bounded redirects/time/size, no proxy env, no cookies. Architecture test fails if any other package makes outbound HTTP.
+- **Config:** `SOURCE_MIN/MAX_INTERVAL_SECONDS` (per-source latency bounds, D-022), `X_BEARER_TOKEN`, `X_API_BASE_URL`, `X_MONTHLY_BUDGET_USD` (D-023), `Config.LogValue()` redacts secrets.
+- **Dev/CI:** compose `postgres` service (local default; overridden by `.env`), `check`/`test` run integration tests, GitHub Actions Postgres service, `.env.example` rewritten with every variable.
+- **Docs:** `docs/DATABASE.md` (Supabase and other providers, pooler modes, RLS), `docs/sources/news-pages.md` (Moneycontrol, CNBC, scanx.trade), updated `x-accounts.md`; decisions D-013 (resolved), D-021…D-027; backlog TP-018 (per-source scheduler), TP-019 (channels), TP-020 (deploy workflow).
+
+### Changed
+| Area | Before | After |
+|---|---|---|
+| Storage | in-memory only | PostgreSQL when `DATABASE_URL` is set (required in production); memory only for development |
+| Dev stack | api only | api + local `postgres`; `check` starts it |
+| `api.Deps` | no readiness | optional `Ready func(ctx) error` |
+| `postgres.Open` | – | `Open(ctx, url, maxConns, mode)` |
+| Migration 0001 | (never applied anywhere) | now includes RLS + provider-role revokes |
+
+### Security notes
+RLS everywhere; credentials never in errors or logs; injection payload tests against a real database; SSRF guard enforced by architecture test; readiness errors sanitized. Reminder: rotate the Supabase password if it was ever pasted into chat or committed.
+
+### Known limitations / open items
+- Not yet confirmed by running (see verification note). Expect possible small fixes in `internal/storage/postgres` and tests (pgx specifics).
+- Per-account login throttling and refresh tokens still pending (M6).
+- Supabase specifics (IPv6 direct host, pause on inactivity, connection limits) are documented from general knowledge: verify against current Supabase docs.
+- Feed uses `LIMIT` not cursors yet (M7).
+
+### Files (main)
+`internal/storage/postgres/*` · `internal/safefetch/*` · `internal/config/config.go` · `internal/api/{server,handlers}.go` · `cmd/server/main.go` · `compose.yaml` · `.github/workflows/ci.yaml` · `.env.example` · `docs/DATABASE.md` · `docs/sources/*` · `DECISIONS.md` · `TESTING.md` · tests
+
+### Next
+Owner run of `check` → M3 sources: TP-011 (source model + admin CRUD), TP-012, TP-018 (per-source scheduler), TP-013/014/015 (RSS, page monitor, manual).
+
+---
+
 ## [0.3.0-dev] — 2026-10-16 — Invite-only access, roles, admin API, audit, API docs (TP-002, TP-008, TP-009, TP-017)
 **Verification:** ⚠️ not compiled or run (no Go toolchain in the authoring sandbox). Run `docker compose run --rm check` first.
 **Suggested commit message:**
@@ -64,7 +122,7 @@ TP-001 (first green `check`) → TP-007 Postgres → TP-010 safe fetcher → TP-
 ---
 
 ## [0.2.0-dev] — 2026-10-16 — M1 Generic core (TP-004, TP-005, TP-006)
-**Verification:** ⚠️ not compiled or run (no Go toolchain in the authoring sandbox). First step: `docker compose run --rm check`; paste errors for a fix pass.
+**Verification:** ✅ owner confirmed M0 and M1 working on Windows 11 (2026-10-17).
 
 ### Why
 The platform must be domain-agnostic (D-004). The v0 core hardcoded market concepts (price/volume event types, thresholds, watchlist, `render.go`). M1 replaces them with data-driven building blocks; markets become one *example*.

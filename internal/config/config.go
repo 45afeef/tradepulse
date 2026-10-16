@@ -24,6 +24,19 @@ type Config struct {
 	MaxWSPerUser   int
 	DocsEnabled    bool
 
+	// Database (managed Postgres: change provider by changing only these variables).
+	DatabaseURL          string
+	DatabaseMigrationURL string // direct / session-mode URL for migrations (defaults to DatabaseURL)
+	DBMaxConns           int
+	DBSimpleProtocol     string // auto | true | false
+
+	// Sources (used from M3/M4). Intervals are bounds; each source sets its own.
+	SourceMinInterval time.Duration
+	SourceMaxInterval time.Duration
+	XBearerToken      string // secret
+	XAPIBaseURL       string
+	XMonthlyBudgetUSD float64
+
 	// Optional first-admin bootstrap (idempotent; remove from env after first start).
 	BootstrapAdminEmail    string
 	BootstrapAdminPassword string
@@ -83,7 +96,43 @@ func Load() (Config, error) {
 	if err := c.LogLevel.UnmarshalText([]byte(get("LOG_LEVEL", "info"))); err != nil {
 		return c, fmt.Errorf("LOG_LEVEL: %w", err)
 	}
+	c.DatabaseURL = strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	c.DatabaseMigrationURL = strings.TrimSpace(os.Getenv("DATABASE_MIGRATION_URL"))
+	if c.DatabaseMigrationURL == "" {
+		c.DatabaseMigrationURL = c.DatabaseURL
+	}
+	if c.Production() && c.DatabaseURL == "" {
+		return c, errors.New("DATABASE_URL is required in production")
+	}
+	if c.DBMaxConns, err = strconv.Atoi(get("DB_MAX_CONNS", "10")); err != nil || c.DBMaxConns < 1 || c.DBMaxConns > 100 {
+		return c, errors.New("DB_MAX_CONNS must be an integer 1-100")
+	}
+	c.DBSimpleProtocol = strings.ToLower(get("DB_SIMPLE_PROTOCOL", "auto"))
+	if c.DBSimpleProtocol != "auto" && c.DBSimpleProtocol != "true" && c.DBSimpleProtocol != "false" {
+		return c, errors.New("DB_SIMPLE_PROTOCOL must be auto, true or false")
+	}
+	minS, e1 := strconv.Atoi(get("SOURCE_MIN_INTERVAL_SECONDS", "60"))
+	maxS, e2 := strconv.Atoi(get("SOURCE_MAX_INTERVAL_SECONDS", "86400"))
+	if e1 != nil || e2 != nil || minS < 5 || maxS < minS {
+		return c, errors.New("SOURCE_MIN_INTERVAL_SECONDS must be >= 5 and SOURCE_MAX_INTERVAL_SECONDS >= the minimum")
+	}
+	c.SourceMinInterval = time.Duration(minS) * time.Second
+	c.SourceMaxInterval = time.Duration(maxS) * time.Second
+	c.XBearerToken = strings.TrimSpace(os.Getenv("X_BEARER_TOKEN"))
+	c.XAPIBaseURL = get("X_API_BASE_URL", "https://api.x.com")
+	if c.XMonthlyBudgetUSD, err = strconv.ParseFloat(get("X_MONTHLY_BUDGET_USD", "20"), 64); err != nil || c.XMonthlyBudgetUSD < 0 {
+		return c, errors.New("X_MONTHLY_BUDGET_USD must be a number >= 0")
+	}
 	return c, nil
+}
+
+// LogValue makes Config safe to log: secrets and credentials are redacted.
+func (c Config) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("env", c.Env), slog.String("addr", c.Addr), slog.Bool("docs", c.DocsEnabled),
+		slog.String("demo", c.SimDemo), slog.Bool("database", c.DatabaseURL != ""),
+		slog.Bool("x_configured", c.XBearerToken != ""), slog.Float64("x_budget_usd", c.XMonthlyBudgetUSD),
+	)
 }
 
 func (c Config) Production() bool { return c.Env == "production" }

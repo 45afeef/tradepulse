@@ -39,6 +39,11 @@ Source → Listener → RawMessage → Processor → Event → event.Bus → (Si
 - WebSocket: tickets only (no JWT in URLs), origin check, size/time limits stay.
 - Don't weaken: rate limits, security headers/CSP, server timeouts, non-root distroless image.
 
+## Storage & database rules
+- All SQL lives in `internal/storage/postgres`; parameterized queries only (`$1`…), never string-built SQL. Connection details come only from env (`DATABASE_URL`…); never log or echo them.
+- New migration = new numbered `NNNN_name.up.sql` + `.down.sql` (never edit applied migrations). Every `CREATE TABLE` must be followed by `ENABLE ROW LEVEL SECURITY` (providers like Supabase expose `public` over HTTP). Tests enforce this.
+- Anything that fetches a URL goes through `internal/safefetch` (architecture test enforces it). Source polling intervals are per-source config (D-022), never hardcoded.
+
 ## API docs rule
 Every endpoint ships with documentation in the Huma registration (summary, description, tag, error codes) and field `doc`/`example` tags; `/docs` is the developer manual. `TestEveryOperationIsDocumented` fails otherwise. Update the overview in `internal/api/docs.go` when behavior visible to API users changes.
 

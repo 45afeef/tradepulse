@@ -1759,7 +1759,7 @@
     },
     "/readyz": {
       "get": {
-        "description": "Returns 200 when the service can accept traffic.",
+        "description": "Returns 200 when the service can accept traffic: the database (if configured) answers a ping. 503 otherwise.",
         "operationId": "ready",
         "responses": {
           "200": {
@@ -1772,7 +1772,7 @@
             },
             "description": "OK"
           },
-          "default": {
+          "500": {
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1780,7 +1780,17 @@
                 }
               }
             },
-            "description": "Error"
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Service Unavailable"
           }
         },
         "summary": "Readiness probe",

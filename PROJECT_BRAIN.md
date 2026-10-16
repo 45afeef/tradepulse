@@ -126,6 +126,7 @@ Every source has: `id, name, type, enabled, schedule/interval, config (declarati
 Generic Event: `id, source_id, type, title, summary, url, occurred_at, ingested_at, entities[], payload{}, dedupe_key, raw_ref`.
 - P0: **event type registry** (type id, payload field schema, title/body templates). Default type `content_item`; sources may define more.
 - P0: unique `(source_id, dedupe_key)`; idempotent ingestion (restart/replay safe).
+- P0: **per-source polling interval** (`poll_interval_seconds`) set by the admin within `SOURCE_MIN/MAX_INTERVAL_SECONDS`; push sources are instant (D-022).
 - P1: cross-source duplicate flagging (canonical URL + title similarity); P2: story clustering.
 - Core code contains **no domain terms** (price, stock, volume); the current market example moves to `examples/` (see BASELINE §5.6).
 
@@ -186,7 +187,7 @@ Modular monolith with a `ROLE` flag (`all` default; `api`/`worker` splits possib
 | Compute | One Cloud Run service. **min-instances=1, max-instances=1, CPU always allocated** — required because pollers and WebSocket pushes run outside request handling (default Cloud Run throttles CPU between requests; scale-to-zero would stop polling). |
 | Why max=1 | Bus, rate limits, WS tickets and the subscription index are in-memory. Scaling out requires Redis/Pub/Sub first (post-MVP, measured need). |
 | WebSocket | Supported, but connections end at the request timeout (configurable, up to 60 min) and on every deploy → clients must reconnect + catch up (§3.4). Verify current limits in GCP docs. |
-| Database | Cloud SQL for PostgreSQL (smallest viable), private connectivity/Cloud SQL connector; pgx pool sized below instance connection limit; automated backups + point-in-time recovery; restore drill before beta. |
+| Database | **Managed PostgreSQL configured only by env vars** (`DATABASE_URL`…, D-021): Supabase free tier first, any provider later (Cloud SQL, RDS…) by changing env only; pgx pool sized below the plan limit; RLS on every table; automated backups; restore drill before beta. See `docs/DATABASE.md`. |
 | Secrets | Secret Manager → env vars: `JWT_SECRET`, DB credentials, X API token, webhook signing keys. Never in images, git or logs. |
 | Registry/CI | Artifact Registry; GitHub Actions (or chosen CI) → deploy using **Workload Identity Federation** (no long-lived service-account keys). |
 | Environments | `staging` and `prod` as separate Cloud Run services (ideally separate projects) with separate DBs and secrets. |
@@ -383,16 +384,16 @@ Full items with acceptance criteria: `BACKLOG.md`.
 | ID | Question | Needed by |
 |---|---|---|
 | Q-01 | ~~Invite delivery~~ → manual admin-copied codes | resolved |
-| Q-02 | Exact first sources: **news page URLs** (do they offer RSS?) and **X handles** | M3 / M4 |
-| Q-03 | GCP project(s), region (e.g. asia-south1), monthly budget cap, **X API monthly budget** and who owns the X developer account | M4 / M6 |
+| Q-02 | ~~First sources~~ → resolved: 3 news pages + 3 X accounts (`docs/sources/`) | resolved |
+| Q-03 | ~~GCP/X details~~ → env-configurable, nothing to share (D-023); X spend cap has a safe default (D-018) | resolved |
 | Q-04 | ~~Privacy~~ → deferred for beta | resolved |
-| Q-05 | Alert channel after in-app/webhook: Telegram, Slack, email, push? | M5 |
+| Q-05 | ~~Extra channel~~ → in-app + webhook now behind a `Channel` interface (D-025) | resolved |
 | Q-06 | Email provider (if email) | M8 |
-| Q-07 | Acceptable alert latency per source type (e.g. news 5 min, X 1–5 min — cost-driven) | M3 |
+| Q-07 | ~~Latency~~ → configurable per source within env bounds (D-022) | resolved |
 | Q-08 | Retention periods (defaults proposed in §6) | M2 |
 | Q-09 | Product name / domain | before M7 |
-| Q-10 | Repo host and CI (GitHub Actions assumed) | M0 |
-| Q-11 | Expected number of beta members and sources | M6 |
+| Q-10 | ~~Repo/CI~~ → GitHub + Actions (D-024) | resolved |
+| Q-11 | ~~Beta size~~ → 10 to 50 members (D-027) | resolved |
 
 ---
 

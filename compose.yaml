@@ -1,9 +1,12 @@
 # Development, identical on Windows / macOS / Linux. Only Docker is required.
-#   docker compose up --build              dev server + hot reload -> http://localhost:8080/docs
-#   docker compose run --rm check          vet + race tests
+#   docker compose up --build              dev server + hot reload + local Postgres -> http://localhost:8080/docs
+#   docker compose run --rm check          vet + race tests (incl. Postgres integration tests)
 #   docker compose run --rm test           tests only
 #   docker compose run --rm openapi        regenerate openapi.json
 #   docker compose run --rm tidy           resolve deps / update go.sum
+#
+# Database: defaults to the local `postgres` service. To use a managed database
+# (e.g. Supabase) put DATABASE_URL (and DATABASE_MIGRATION_URL) in a .env file; see docs/DATABASE.md.
 x-go: &go
   image: tradepulse-dev          # one image shared by every service below
   build:
@@ -15,16 +18,42 @@ x-go: &go
     - gomod:/go/pkg/mod          # dependency cache
     - gobuild:/root/.cache/go-build
 
+x-testdb: &testdb
+  # Integration tests create and drop their own schemas, so they can share this database.
+  TEST_DATABASE_URL: postgres://postgres:postgres@postgres:5432/tradepulse?sslmode=disable
+
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres   # DEV ONLY
+      POSTGRES_DB: tradepulse
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tradepulse"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   api:
     <<: *go
     ports:
       - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       APP_ENV: development
       DOCS_ENABLED: "true"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-0123456789abcdef0123}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/tradepulse?sslmode=disable}
+      DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:-}
+      DB_SIMPLE_PROTOCOL: ${DB_SIMPLE_PROTOCOL:-auto}
       SIM_DEMO: market
       # DEV ONLY first admin (idempotent). Production: set via Secret Manager, remove after first start.
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
@@ -35,11 +64,19 @@ services:
   check:
     <<: *go
     profiles: [tools]
-    command: sh -c "go mod tidy && go vet ./... && go test -race ./..."
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *testdb
+    command: sh -c "go mod tidy && go vet ./... && go test -race -count=1 ./..."
   test:
     <<: *go
     profiles: [tools]
-    command: go test -race ./...
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *testdb
+    command: go test -race -count=1 ./...
   openapi:
     <<: *go
     profiles: [tools]
@@ -52,3 +89,4 @@ services:
 volumes:
   gomod:
   gobuild:
+  pgdata:
