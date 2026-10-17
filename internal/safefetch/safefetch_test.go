@@ -224,3 +224,19 @@ func TestExtraHeadersAreForwarded(t *testing.T) {
 		t.Fatalf("header not forwarded: %q %v", got, err)
 	}
 }
+
+func TestValidateURLStaticChecks(t *testing.T) {
+	good := []string{"https://example.com/feed.xml", "http://news.example.org/a?b=c", "https://example.com:443/x"}
+	for _, u := range good {
+		if err := ValidateURL(u); err != nil {
+			t.Errorf("%s should be valid: %v", u, err)
+		}
+	}
+	bad := []string{"file:///etc/passwd", "http://127.0.0.1/", "http://169.254.169.254/", "http://[::1]/", "http://10.0.0.1/x",
+		"http://metadata.google.internal/", "https://user:pw@example.com/", "ftp://example.com/", "http://example.com:8080/", "", "not a url"}
+	for _, u := range bad {
+		if err := ValidateURL(u); err == nil {
+			t.Errorf("%q must be rejected", u)
+		}
+	}
+}

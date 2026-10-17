@@ -41,6 +41,9 @@ Example: notify me when *checkout* is anything other than up:
 §§§
 Every delivered item has a **reason** explaining which subscription matched.
 
+## Sources
+Items come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). §GET /api/v1/sources§ lists the enabled ones: subscribe with kind §source§ and the source's name, or with kind §entity§ and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.
+
 ## Real-time (WebSocket)
 1. §POST /api/v1/ws-ticket§ (with your token) → a **one-time ticket valid for 30 seconds**.
 2. Connect to §ws(s)://<host>/ws?ticket=<ticket>§ (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.

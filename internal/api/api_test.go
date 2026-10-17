@@ -12,12 +12,15 @@ import (
 	"time"
 
 	"tradepulse/internal/auth"
+	"tradepulse/internal/connector"
 	"tradepulse/internal/config"
 	"tradepulse/internal/delivery"
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/invite"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
+	"tradepulse/internal/infrastructure/eventbus"
+	"tradepulse/internal/safefetch"
 	"tradepulse/internal/storage/memory"
 )
 
@@ -33,7 +36,7 @@ func newServer(t *testing.T, mutate func(*config.Config)) (*Server, http.Handler
 	t.Helper()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := config.Config{Env: "development", DocsEnabled: true, RateRPS: 1000, RateBurst: 1000,
-		AllowedOrigins: []string{"http://allowed.example"}}
+		SourceMinInterval: 60 * time.Second, SourceMaxInterval: 24 * time.Hour, AllowedOrigins: []string{"http://allowed.example"}}
 	if mutate != nil {
 		mutate(&cfg)
 	}
@@ -41,9 +44,13 @@ func newServer(t *testing.T, mutate func(*config.Config)) (*Server, http.Handler
 	if err != nil {
 		t.Fatal(err)
 	}
+	fake := &fakeNet{pages: map[string]*safefetch.Response{}}
+	lastNet = fake
 	s, err := New(Deps{
 		Cfg: cfg, Log: log, Users: memory.NewUserRepo(), Feeds: memory.NewFeedRepo(10), JWT: jwt,
 		Invites: memory.NewInviteRepo(), Audit: memory.NewAuditRepo(100),
+		Sources: memory.NewSourceRepo(), Runs: memory.NewRunRepo(), Bus: eventbus.NewMemory(64, log),
+		Connectors: connector.NewRegistry(connector.NewRSS(fake), connector.NewWebMonitor(fake, connector.NewRobots(fake, time.Hour, nil))),
 		Tickets: auth.NewTicketStore(time.Minute), Personalizer: nopPersonalizer{},
 		Hub: delivery.NewHub(log, nil, 2), Registry: event.NewRegistry(),
 	})

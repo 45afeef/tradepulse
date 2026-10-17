@@ -33,6 +33,7 @@ type Config struct {
 	// Sources (used from M3/M4). Intervals are bounds; each source sets its own.
 	SourceMinInterval time.Duration
 	SourceMaxInterval time.Duration
+	FetchUserAgent    string // optional override for outbound requests
 	XBearerToken      string // secret
 	XAPIBaseURL       string
 	XMonthlyBudgetUSD float64
@@ -118,6 +119,10 @@ func Load() (Config, error) {
 	}
 	c.SourceMinInterval = time.Duration(minS) * time.Second
 	c.SourceMaxInterval = time.Duration(maxS) * time.Second
+	c.FetchUserAgent = strings.TrimSpace(os.Getenv("FETCH_USER_AGENT"))
+	if len(c.FetchUserAgent) > 200 {
+		return c, errors.New("FETCH_USER_AGENT is too long")
+	}
 	c.XBearerToken = strings.TrimSpace(os.Getenv("X_BEARER_TOKEN"))
 	c.XAPIBaseURL = get("X_API_BASE_URL", "https://api.x.com")
 	if c.XMonthlyBudgetUSD, err = strconv.ParseFloat(get("X_MONTHLY_BUDGET_USD", "20"), 64); err != nil || c.XMonthlyBudgetUSD < 0 {

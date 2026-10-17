@@ -56,6 +56,52 @@
         ],
         "type": "object"
       },
+      "CatalogBody": {
+        "additionalProperties": false,
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogItem"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "type": "object"
+      },
+      "CatalogItem": {
+        "additionalProperties": false,
+        "properties": {
+          "entities": {
+            "description": "Topics usable in 'entity' subscriptions",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "Use as the value of a 'source' subscription",
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "entities"
+        ],
+        "type": "object"
+      },
       "Condition": {
         "additionalProperties": false,
         "properties": {
@@ -473,6 +519,83 @@
         ],
         "type": "object"
       },
+      "ManualBody": {
+        "additionalProperties": false,
+        "properties": {
+          "entities": {
+            "description": "Extra topics for this item",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "Name of an enabled manual source",
+            "examples": [
+              "admin-posts"
+            ],
+            "maxLength": 40,
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 1000,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "description": "Optional link (http/https)",
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "title"
+        ],
+        "type": "object"
+      },
+      "ManualOutBody": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id"
+        ],
+        "type": "object"
+      },
+      "PreviewItem": {
+        "additionalProperties": false,
+        "properties": {
+          "published_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "type": "object"
+      },
       "Profile": {
         "additionalProperties": false,
         "properties": {
@@ -556,6 +679,286 @@
         ],
         "type": "object"
       },
+      "RunView": {
+        "additionalProperties": false,
+        "properties": {
+          "duration_ms": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "http_status": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "items_new": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "items_published": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "items_seen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "started_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "duration_ms",
+          "ok",
+          "items_seen",
+          "items_new",
+          "items_published"
+        ],
+        "type": "object"
+      },
+      "SourceBody": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "description": "Default false: test first, then enable.",
+            "type": "boolean"
+          },
+          "entities": {
+            "description": "Topics attached to every item (members can subscribe to them)",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "interval_seconds": {
+            "description": "Polling interval for this source (rss and webmonitor)",
+            "examples": [
+              300
+            ],
+            "format": "int64",
+            "maximum": 604800,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "description": "Permanent slug members subscribe to",
+            "examples": [
+              "cnbc-top-news"
+            ],
+            "maxLength": 40,
+            "minLength": 2,
+            "pattern": "^[a-z0-9][a-z0-9_-]{1,39}$",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "rss",
+              "webmonitor",
+              "manual"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "description": "Public http(s) URL (rss and webmonitor)",
+            "examples": [
+              "https://example.com/feed.xml"
+            ],
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "web": {
+            "$ref": "#/components/schemas/WebConfig",
+            "description": "Required for webmonitor"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "type": "object"
+      },
+      "SourceDetailBody": {
+        "additionalProperties": false,
+        "properties": {
+          "recent_runs": {
+            "items": {
+              "$ref": "#/components/schemas/RunView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceView"
+          }
+        },
+        "required": [
+          "source",
+          "recent_runs"
+        ],
+        "type": "object"
+      },
+      "SourceListBody": {
+        "additionalProperties": false,
+        "properties": {
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "type": "object"
+      },
+      "SourceUpdateBody": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "entities": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "interval_seconds": {
+            "format": "int64",
+            "maximum": 604800,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "url": {
+            "maxLength": 2000,
+            "type": "string"
+          },
+          "web": {
+            "$ref": "#/components/schemas/WebConfig"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "SourceView": {
+        "additionalProperties": false,
+        "properties": {
+          "consecutive_failures": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "entities": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "health": {
+            "enum": [
+              "ok",
+              "pending",
+              "degraded",
+              "failing",
+              "overdue",
+              "disabled"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "interval_seconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "items_total": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "last_error": {
+            "type": "string"
+          },
+          "last_item_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_run_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_success_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "next_run_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "rss",
+              "webmonitor",
+              "manual"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "web": {
+            "$ref": "#/components/schemas/WebConfig"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "enabled",
+          "interval_seconds",
+          "entities",
+          "health",
+          "consecutive_failures",
+          "items_total",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "StatusBody": {
         "additionalProperties": false,
         "properties": {
@@ -614,6 +1017,37 @@
         "required": [
           "kind",
           "value"
+        ],
+        "type": "object"
+      },
+      "TestBody": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "description": "Items found (up to 20 are shown)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "error": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "preview": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewItem"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "ok",
+          "count",
+          "preview"
         ],
         "type": "object"
       },
@@ -709,6 +1143,50 @@
           "users"
         ],
         "type": "object"
+      },
+      "WebConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "ignore_robots": {
+            "description": "Only with a recorded reason; robots.txt is respected by default.",
+            "type": "boolean"
+          },
+          "ignore_robots_reason": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "item_selector": {
+            "description": "CSS selector matching each article block or link, e.g. 'div.news-item' or 'h3 a'",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "link_selector": {
+            "description": "Relative to the item. Default: the first link.",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "max_items": {
+            "description": "Default 30.",
+            "format": "int64",
+            "maximum": 100,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "summary_selector": {
+            "description": "Optional, relative to the item.",
+            "maxLength": 200,
+            "type": "string"
+          },
+          "title_selector": {
+            "description": "Relative to the item. Default: the link text.",
+            "maxLength": 200,
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_selector"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -721,7 +1199,7 @@
     }
   },
   "info": {
-    "description": "\n**TradePulse** collects information from many sources, normalizes it into *events*, and delivers\n**the items relevant to you** in one live feed, with automatic alerts. Access is **invite-only**.\n\n## Quick start (5 minutes)\n1. **Get an invite code** from an administrator (looks like `tp_inv_…`). Codes are single-use and expire.\n2. `POST /api/v1/auth/register` with your email, a password (10+ characters) and the invite code. The response contains a **token**.\n3. Click **Authorize** in this page (or send `Authorization: Bearer \u003ctoken\u003e` on every request).\n4. `GET /api/v1/event-types` shows what kinds of events exist and **which fields you can filter on**.\n5. `PUT /api/v1/me/subscriptions` tells the system what you care about (see *Subscriptions* below). **Until you subscribe, your feed is empty.**\n6. `GET /api/v1/me/feed` returns recent items. For live delivery: `POST /api/v1/ws-ticket`, then open the WebSocket (see *Real-time*).\n\n## Authentication\n- Register or log in to get a JWT; send it as `Authorization: Bearer \u003ctoken\u003e`.\n- Tokens expire (default 12 h); log in again to get a new one.\n- A **suspended** account is rejected everywhere immediately and its live connections are closed.\n- Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see `Retry-After`).\n\n## Subscriptions (what you receive)\nA subscription says *what to watch*; optional **types** and **conditions** narrow it. An item is delivered if **any** subscription matches, unless it is **muted**.\n\n| kind | matches when |\n|---|---|\n| `entity` | the event lists that entity (case-insensitive), e.g. `tcs`, `checkout` |\n| `keyword` | the whole word/phrase appears in the item's title or text, e.g. `repo rate` |\n| `source` | the event comes from that source id, e.g. `status_sim` |\n\n**Conditions** are `field operator value` checks; **all** must hold. Operators: `\u003e` `\u003e=` `\u003c` `\u003c=` `==` `!=` `in` `contains` `any_of`.\nFields come from `GET /api/v1/event-types` (built-in: `type`, `source`, `title`, `summary`, `url`, `entity`; plus each type's own fields).\nIf an event does not have the field, the condition is simply *false*.\n\nExample: notify me when *checkout* is anything other than up:\n```json\n{\"subscriptions\":[{\"kind\":\"entity\",\"value\":\"checkout\",\"conditions\":[{\"field\":\"status\",\"op\":\"!=\",\"value\":\"up\"}]}],\n \"muted\":[\"maintenance\"]}\n```\nEvery delivered item has a **reason** explaining which subscription matched.\n\n## Real-time (WebSocket)\n1. `POST /api/v1/ws-ticket` (with your token) → a **one-time ticket valid for 30 seconds**.\n2. Connect to `ws(s)://\u003chost\u003e/ws?ticket=\u003cticket\u003e` (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.\n3. Messages are JSON text frames:\n```json\n{\"type\":\"connected\"}\n{\"type\":\"feed_item\",\"data\":{\"id\":\"…\",\"title\":\"checkout is down\",\"body\":\"Latency 950 ms\",\"severity\":\"notable\",\"reason\":\"Matched your entity subscription \\\"checkout\\\"\",\"created_at\":\"…\"}}\n```\n4. **Reconnect with backoff** when the connection drops (deploys and idle limits close connections). After reconnecting, call `GET /api/v1/me/feed` to catch up on anything missed.\n5. Limits: at most 5 simultaneous connections per user; slow readers are disconnected. Close code 1008 = policy (cap/suspended), 1001 = server going away.\nThe WebSocket cannot be tried from this page; use a client such as Postman or `websocat`.\n\n## Errors\nErrors use **RFC 9457 problem JSON**: `{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"…\"}`. Validation failures (422) list the offending fields.\nCommon codes: `401` missing/invalid token · `403` not allowed (e.g. not an admin, bad invite) · `409` conflict · `422` invalid input · `429` rate limited · `413` body too large.\n\n## Administrators\nEndpoints under **admin** require the `admin` role (others get 403). Typical flow: create an invite → share the code → watch its status → suspend/reactivate members → review the audit log.\n",
+    "description": "\n**TradePulse** collects information from many sources, normalizes it into *events*, and delivers\n**the items relevant to you** in one live feed, with automatic alerts. Access is **invite-only**.\n\n## Quick start (5 minutes)\n1. **Get an invite code** from an administrator (looks like `tp_inv_…`). Codes are single-use and expire.\n2. `POST /api/v1/auth/register` with your email, a password (10+ characters) and the invite code. The response contains a **token**.\n3. Click **Authorize** in this page (or send `Authorization: Bearer \u003ctoken\u003e` on every request).\n4. `GET /api/v1/event-types` shows what kinds of events exist and **which fields you can filter on**.\n5. `PUT /api/v1/me/subscriptions` tells the system what you care about (see *Subscriptions* below). **Until you subscribe, your feed is empty.**\n6. `GET /api/v1/me/feed` returns recent items. For live delivery: `POST /api/v1/ws-ticket`, then open the WebSocket (see *Real-time*).\n\n## Authentication\n- Register or log in to get a JWT; send it as `Authorization: Bearer \u003ctoken\u003e`.\n- Tokens expire (default 12 h); log in again to get a new one.\n- A **suspended** account is rejected everywhere immediately and its live connections are closed.\n- Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see `Retry-After`).\n\n## Subscriptions (what you receive)\nA subscription says *what to watch*; optional **types** and **conditions** narrow it. An item is delivered if **any** subscription matches, unless it is **muted**.\n\n| kind | matches when |\n|---|---|\n| `entity` | the event lists that entity (case-insensitive), e.g. `tcs`, `checkout` |\n| `keyword` | the whole word/phrase appears in the item's title or text, e.g. `repo rate` |\n| `source` | the event comes from that source id, e.g. `status_sim` |\n\n**Conditions** are `field operator value` checks; **all** must hold. Operators: `\u003e` `\u003e=` `\u003c` `\u003c=` `==` `!=` `in` `contains` `any_of`.\nFields come from `GET /api/v1/event-types` (built-in: `type`, `source`, `title`, `summary`, `url`, `entity`; plus each type's own fields).\nIf an event does not have the field, the condition is simply *false*.\n\nExample: notify me when *checkout* is anything other than up:\n```json\n{\"subscriptions\":[{\"kind\":\"entity\",\"value\":\"checkout\",\"conditions\":[{\"field\":\"status\",\"op\":\"!=\",\"value\":\"up\"}]}],\n \"muted\":[\"maintenance\"]}\n```\nEvery delivered item has a **reason** explaining which subscription matched.\n\n## Sources\nItems come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). `GET /api/v1/sources` lists the enabled ones: subscribe with kind `source` and the source's name, or with kind `entity` and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.\n\n## Real-time (WebSocket)\n1. `POST /api/v1/ws-ticket` (with your token) → a **one-time ticket valid for 30 seconds**.\n2. Connect to `ws(s)://\u003chost\u003e/ws?ticket=\u003cticket\u003e` (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.\n3. Messages are JSON text frames:\n```json\n{\"type\":\"connected\"}\n{\"type\":\"feed_item\",\"data\":{\"id\":\"…\",\"title\":\"checkout is down\",\"body\":\"Latency 950 ms\",\"severity\":\"notable\",\"reason\":\"Matched your entity subscription \\\"checkout\\\"\",\"created_at\":\"…\"}}\n```\n4. **Reconnect with backoff** when the connection drops (deploys and idle limits close connections). After reconnecting, call `GET /api/v1/me/feed` to catch up on anything missed.\n5. Limits: at most 5 simultaneous connections per user; slow readers are disconnected. Close code 1008 = policy (cap/suspended), 1001 = server going away.\nThe WebSocket cannot be tried from this page; use a client such as Postman or `websocat`.\n\n## Errors\nErrors use **RFC 9457 problem JSON**: `{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"…\"}`. Validation failures (422) list the offending fields.\nCommon codes: `401` missing/invalid token · `403` not allowed (e.g. not an admin, bad invite) · `409` conflict · `422` invalid input · `429` rate limited · `413` body too large.\n\n## Administrators\nEndpoints under **admin** require the `admin` role (others get 403). Typical flow: create an invite → share the code → watch its status → suspend/reactivate members → review the audit log.\n",
     "title": "TradePulse API",
     "version": "0.3.0"
   },
@@ -1030,6 +1508,689 @@
           }
         ],
         "summary": "Revoke a pending invite",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/items": {
+      "post": {
+        "description": "Publishes one item through an enabled `manual` source; matching members receive it live. Useful for announcements and corrections.",
+        "operationId": "post-item",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManualOutBody"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Publish a manual item",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/sources": {
+      "get": {
+        "description": "Health: ok, pending, degraded, failing, overdue (the scheduler missed its schedule: silence watchdog) or disabled.",
+        "operationId": "list-sources",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceListBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List sources with health",
+        "tags": [
+          "admin"
+        ]
+      },
+      "post": {
+        "description": "Types: `rss` (RSS/Atom feed URL), `webmonitor` (HTML page + CSS selectors; robots.txt respected), `manual` (admin posts). `interval_seconds` is per source (bounded by the platform minimum/maximum). The URL must be a public http(s) address (SSRF-checked). The name is a permanent slug that members subscribe to. Sources start **disabled**: use *Test a source draft* first, then enable.",
+        "operationId": "create-source",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a source",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/sources/test": {
+      "post": {
+        "description": "Fetches the URL with the given settings and returns the first items it would extract (nothing is stored or published). Use it to tune CSS selectors. Fetch problems are reported in the response (`ok: false`), invalid settings return 422.",
+        "operationId": "test-source",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Test a source draft without saving",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/sources/{id}": {
+      "delete": {
+        "description": "Removes the source, its run history and stored items. Members' subscriptions to it simply stop matching.",
+        "operationId": "delete-source",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a source",
+        "tags": [
+          "admin"
+        ]
+      },
+      "get": {
+        "description": "Includes the last 20 fetch runs (status, items seen/new/published, errors).",
+        "operationId": "get-source",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDetailBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Source detail with recent runs",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "description": "Replaces url, enabled, interval_seconds, entities and web settings. Name and type cannot change. Same validation as creation.",
+        "operationId": "update-source",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceUpdateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a source's settings",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/sources/{id}/run": {
+      "post": {
+        "description": "Schedules the next fetch immediately (the scheduler picks it up within seconds). Only for enabled rss/webmonitor sources.",
+        "operationId": "run-source-now",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Fetch a source as soon as possible",
         "tags": [
           "admin"
         ]
@@ -1675,6 +2836,53 @@
         "summary": "Replace my subscriptions and mutes",
         "tags": [
           "me"
+        ]
+      }
+    },
+    "/api/v1/sources": {
+      "get": {
+        "description": "Enabled sources with their names and topics (entities). Use a source's `name` in a `source` subscription, or one of its `entities` in an `entity` subscription.",
+        "operationId": "list-catalog-sources",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Sources you can subscribe to",
+        "tags": [
+          "catalog"
         ]
       }
     },

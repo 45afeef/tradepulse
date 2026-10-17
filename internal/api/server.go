@@ -11,12 +11,14 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
 	"tradepulse/internal/auth"
+	"tradepulse/internal/connector"
 	"tradepulse/internal/config"
 	"tradepulse/internal/delivery"
 	"tradepulse/internal/domain/audit"
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/feed"
 	"tradepulse/internal/domain/invite"
+	"tradepulse/internal/domain/sourcedef"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
 )
@@ -39,6 +41,10 @@ type Deps struct {
 	Personalizer Personalizer
 	Hub          *delivery.Hub
 	Registry     *event.Registry
+	Sources      sourcedef.Repository
+	Runs         sourcedef.RunRepository
+	Bus          event.Bus
+	Connectors   *connector.Registry
 	// Ready (optional) checks dependencies for /readyz, e.g. the database ping.
 	Ready func(ctx context.Context) error
 }
@@ -158,6 +164,43 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 	huma.Register(api, huma.Operation{OperationID: "list-audit", Method: http.MethodGet, Path: "/api/v1/admin/audit", Tags: []string{"admin"},
 		Summary: "Audit log", Security: secured, Middlewares: admin,
 		Description: "Newest first. Records registrations, invite creation/revocation and suspensions/reactivations (never secrets).", Errors: []int{401, 403}}, s.listAudit)
+	huma.Register(api, huma.Operation{OperationID: "list-catalog-sources", Method: http.MethodGet, Path: "/api/v1/sources", Tags: []string{"catalog"},
+		Summary: "Sources you can subscribe to", Security: secured, Middlewares: member,
+		Description: "Enabled sources with their names and topics (entities). Use a source's `name` in a `source` subscription, " +
+			"or one of its `entities` in an `entity` subscription.", Errors: []int{401}}, s.catalogSources)
+
+	huma.Register(api, huma.Operation{OperationID: "create-source", Method: http.MethodPost, Path: "/api/v1/admin/sources", Tags: []string{"admin"},
+		Summary: "Add a source", Security: secured, Middlewares: admin, DefaultStatus: http.StatusCreated, MaxBodyBytes: small,
+		Description: "Types: `rss` (RSS/Atom feed URL), `webmonitor` (HTML page + CSS selectors; robots.txt respected), `manual` (admin posts). " +
+			"`interval_seconds` is per source (bounded by the platform minimum/maximum). The URL must be a public http(s) address (SSRF-checked). " +
+			"The name is a permanent slug that members subscribe to. Sources start **disabled**: use *Test a source draft* first, then enable.",
+		Errors: []int{401, 403, 409, 422}}, s.createSource)
+	huma.Register(api, huma.Operation{OperationID: "list-sources", Method: http.MethodGet, Path: "/api/v1/admin/sources", Tags: []string{"admin"},
+		Summary: "List sources with health", Security: secured, Middlewares: admin,
+		Description: "Health: ok, pending, degraded, failing, overdue (the scheduler missed its schedule: silence watchdog) or disabled.", Errors: []int{401, 403}}, s.listSources)
+	huma.Register(api, huma.Operation{OperationID: "get-source", Method: http.MethodGet, Path: "/api/v1/admin/sources/{id}", Tags: []string{"admin"},
+		Summary: "Source detail with recent runs", Security: secured, Middlewares: admin,
+		Description: "Includes the last 20 fetch runs (status, items seen/new/published, errors).", Errors: []int{401, 403, 404}}, s.getSource)
+	huma.Register(api, huma.Operation{OperationID: "update-source", Method: http.MethodPut, Path: "/api/v1/admin/sources/{id}", Tags: []string{"admin"},
+		Summary: "Update a source's settings", Security: secured, Middlewares: admin, MaxBodyBytes: small,
+		Description: "Replaces url, enabled, interval_seconds, entities and web settings. Name and type cannot change. Same validation as creation.",
+		Errors: []int{401, 403, 404, 422}}, s.updateSource)
+	huma.Register(api, huma.Operation{OperationID: "delete-source", Method: http.MethodDelete, Path: "/api/v1/admin/sources/{id}", Tags: []string{"admin"},
+		Summary: "Delete a source", Security: secured, Middlewares: admin, DefaultStatus: http.StatusNoContent,
+		Description: "Removes the source, its run history and stored items. Members' subscriptions to it simply stop matching.", Errors: []int{401, 403, 404}}, s.deleteSource)
+	huma.Register(api, huma.Operation{OperationID: "run-source-now", Method: http.MethodPost, Path: "/api/v1/admin/sources/{id}/run", Tags: []string{"admin"},
+		Summary: "Fetch a source as soon as possible", Security: secured, Middlewares: admin,
+		Description: "Schedules the next fetch immediately (the scheduler picks it up within seconds). Only for enabled rss/webmonitor sources.",
+		Errors: []int{401, 403, 404, 409}}, s.runSourceNow)
+	huma.Register(api, huma.Operation{OperationID: "test-source", Method: http.MethodPost, Path: "/api/v1/admin/sources/test", Tags: []string{"admin"},
+		Summary: "Test a source draft without saving", Security: secured, Middlewares: admin, MaxBodyBytes: small,
+		Description: "Fetches the URL with the given settings and returns the first items it would extract (nothing is stored or published). " +
+			"Use it to tune CSS selectors. Fetch problems are reported in the response (`ok: false`), invalid settings return 422.",
+		Errors: []int{401, 403, 422}}, s.testSource)
+	huma.Register(api, huma.Operation{OperationID: "post-item", Method: http.MethodPost, Path: "/api/v1/admin/items", Tags: []string{"admin"},
+		Summary: "Publish a manual item", Security: secured, Middlewares: admin, DefaultStatus: http.StatusCreated, MaxBodyBytes: small,
+		Description: "Publishes one item through an enabled `manual` source; matching members receive it live. Useful for announcements and corrections.",
+		Errors: []int{401, 403, 404, 409, 422}}, s.postItem)
 	return api
 }
 

@@ -239,3 +239,21 @@ func (f *Fetcher) Get(ctx context.Context, rawURL string, extra http.Header) (*R
 	}
 	return &Response{Status: resp.StatusCode, Header: resp.Header, Body: body, FinalURL: resp.Request.URL.String()}, nil
 }
+
+// ValidateURL performs the static checks (scheme, port, credentials, blocked host
+// names and IP literals) without any network access. Use it to reject bad URLs at
+// configuration time; Get re-validates at fetch time, including DNS answers.
+func ValidateURL(raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ErrURL
+	}
+	f := &Fetcher{}
+	if err := f.validateURL(u); err != nil {
+		return err
+	}
+	if a, err := netip.ParseAddr(u.Hostname()); err == nil && isBlocked(a) {
+		return ErrBlocked
+	}
+	return nil
+}

@@ -19,16 +19,19 @@ import (
 	"tradepulse/internal/api"
 	"tradepulse/internal/auth"
 	"tradepulse/internal/config"
+	"tradepulse/internal/connector"
 	"tradepulse/internal/delivery"
 	"tradepulse/internal/domain/audit"
 	"tradepulse/internal/domain/feed"
 	"tradepulse/internal/domain/invite"
+	"tradepulse/internal/domain/sourcedef"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/infrastructure/eventbus"
 	"tradepulse/internal/ingestion"
 	"tradepulse/internal/personalization"
 	"tradepulse/internal/processing"
+	"tradepulse/internal/safefetch"
 	"tradepulse/internal/source"
 	"tradepulse/internal/storage/memory"
 	"tradepulse/internal/storage/postgres"
@@ -64,6 +67,9 @@ func run() error {
 		feeds   feed.Repository
 		invites invite.Repository
 		audits  audit.Repository
+		sources sourcedef.Repository
+		runs    sourcedef.RunRepository
+		items   sourcedef.ItemStore
 		ready   func(context.Context) error
 	)
 	if cfg.DatabaseURL != "" {
@@ -83,12 +89,14 @@ func run() error {
 		defer pool.Close()
 		users, feeds = postgres.NewUserRepo(pool), postgres.NewFeedRepo(pool)
 		invites, audits = postgres.NewInviteRepo(pool), postgres.NewAuditRepo(pool)
+		sources, runs, items = postgres.NewSourceRepo(pool), postgres.NewRunRepo(pool), postgres.NewItemStore(pool)
 		ready = pool.Ping
 		go postgres.RunRetention(ctx, pool, log, 1000, 365*24*time.Hour)
 		log.Info("storage: postgres")
 	} else {
 		users, feeds = memory.NewUserRepo(), memory.NewFeedRepo(200)
 		invites, audits = memory.NewInviteRepo(), memory.NewAuditRepo(10000)
+		sources, runs, items = memory.NewSourceRepo(), memory.NewRunRepo(), memory.NewItemStore()
 		log.Warn("storage: in-memory (development only; data is lost on restart)")
 	}
 	hub := delivery.NewHub(log, cfg.AllowedOrigins, cfg.MaxWSPerUser)
@@ -129,6 +137,10 @@ func run() error {
 		procs[status.SourceName] = status.NewProcessor()
 	}
 
+	// Outbound fetching: the ONLY network path for sources is the SSRF-safe fetcher.
+	fetcher := safefetch.New(safefetch.Options{UserAgent: cfg.FetchUserAgent})
+	conns := connector.NewRegistry(connector.NewRSS(fetcher), connector.NewWebMonitor(fetcher, connector.NewRobots(fetcher, time.Hour, nil)))
+
 	jwt, err := auth.NewJWT(cfg.JWTSecret, "tradepulse", cfg.JWTTTL)
 	if err != nil {
 		return err
@@ -138,7 +150,7 @@ func run() error {
 
 	apiSrv, err := api.New(api.Deps{
 		Cfg: cfg, Log: log, Users: users, Feeds: feeds, Invites: invites, Audit: audits, JWT: jwt,
-		Tickets: tickets, Personalizer: engine, Hub: hub, Registry: reg, Ready: ready,
+		Tickets: tickets, Personalizer: engine, Hub: hub, Registry: reg, Ready: ready, Sources: sources, Runs: runs, Bus: bus, Connectors: conns,
 	})
 	if err != nil {
 		return err
@@ -146,6 +158,14 @@ func run() error {
 	go apiSrv.Run(ctx)
 
 	var wg sync.WaitGroup
+	sched := ingestion.NewScheduler(log, sources, runs, items, conns, bus, reg, ingestion.SchedulerConfig{
+		Bounds: sourcedef.Bounds{Min: cfg.SourceMinInterval, Max: cfg.SourceMaxInterval},
+	})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sched.Run(ctx)
+	}()
 	if len(listeners) > 0 {
 		wg.Add(1)
 		go func() {

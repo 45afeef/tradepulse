@@ -12,6 +12,7 @@ import (
 	"tradepulse/internal/domain/audit"
 	"tradepulse/internal/domain/feed"
 	"tradepulse/internal/domain/invite"
+	"tradepulse/internal/domain/sourcedef"
 	"tradepulse/internal/domain/user"
 )
 
@@ -230,4 +231,168 @@ func (r *AuditRepo) Recent(_ context.Context, limit int) ([]audit.Entry, error) 
 		out = append(out, r.entries[i])
 	}
 	return out, nil
+}
+
+// ---- sources ----
+
+type SourceRepo struct {
+	mu     sync.Mutex
+	byID   map[string]sourcedef.Source
+	byName map[string]string
+}
+
+func NewSourceRepo() *SourceRepo {
+	return &SourceRepo{byID: map[string]sourcedef.Source{}, byName: map[string]string{}}
+}
+
+func (r *SourceRepo) Create(_ context.Context, s sourcedef.Source) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.byName[s.Name]; ok {
+		return sourcedef.ErrNameTaken
+	}
+	r.byID[s.ID] = s
+	r.byName[s.Name] = s.ID
+	return nil
+}
+
+func (r *SourceRepo) Get(_ context.Context, id string) (sourcedef.Source, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.byID[id]
+	if !ok {
+		return sourcedef.Source{}, sourcedef.ErrNotFound
+	}
+	return s, nil
+}
+
+func (r *SourceRepo) GetByName(_ context.Context, name string) (sourcedef.Source, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	id, ok := r.byName[name]
+	if !ok {
+		return sourcedef.Source{}, sourcedef.ErrNotFound
+	}
+	return r.byID[id], nil
+}
+
+func (r *SourceRepo) List(_ context.Context) ([]sourcedef.Source, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]sourcedef.Source, 0, len(r.byID))
+	for _, s := range r.byID {
+		out = append(out, s)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+func (r *SourceRepo) Update(_ context.Context, s sourcedef.Source) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cur, ok := r.byID[s.ID]
+	if !ok {
+		return sourcedef.ErrNotFound
+	}
+	cur.URL, cur.Enabled, cur.IntervalSeconds, cur.Entities, cur.Web, cur.UpdatedAt = s.URL, s.Enabled, s.IntervalSeconds, s.Entities, s.Web, s.UpdatedAt
+	r.byID[s.ID] = cur
+	return nil
+}
+
+func (r *SourceRepo) Delete(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.byID[id]
+	if !ok {
+		return sourcedef.ErrNotFound
+	}
+	delete(r.byID, id)
+	delete(r.byName, s.Name)
+	return nil
+}
+
+func (r *SourceRepo) SaveState(_ context.Context, id string, st sourcedef.State) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.byID[id]
+	if !ok {
+		return sourcedef.ErrNotFound
+	}
+	s.State = st
+	r.byID[id] = s
+	return nil
+}
+
+type RunRepo struct {
+	mu   sync.Mutex
+	runs []sourcedef.Run
+}
+
+func NewRunRepo() *RunRepo { return &RunRepo{} }
+
+func (r *RunRepo) Add(_ context.Context, run sourcedef.Run) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.runs = append(r.runs, run)
+	if len(r.runs) > 5000 {
+		r.runs = append([]sourcedef.Run(nil), r.runs[len(r.runs)-5000:]...)
+	}
+	return nil
+}
+
+func (r *RunRepo) Recent(_ context.Context, sourceID string, limit int) ([]sourcedef.Run, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := []sourcedef.Run{}
+	for i := len(r.runs) - 1; i >= 0 && len(out) < limit; i-- {
+		if r.runs[i].SourceID == sourceID {
+			out = append(out, r.runs[i])
+		}
+	}
+	return out, nil
+}
+
+func (r *RunRepo) Prune(_ context.Context, olderThan time.Time) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	kept := r.runs[:0:0]
+	for _, run := range r.runs {
+		if !run.StartedAt.Before(olderThan) {
+			kept = append(kept, run)
+		}
+	}
+	n := int64(len(r.runs) - len(kept))
+	r.runs = kept
+	return n, nil
+}
+
+type ItemStore struct {
+	mu    sync.Mutex
+	items map[string]time.Time // sourceID + "\x00" + key -> fetched
+}
+
+func NewItemStore() *ItemStore { return &ItemStore{items: map[string]time.Time{}} }
+
+func (s *ItemStore) Insert(_ context.Context, sourceID, key string, _ []byte, now time.Time) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	k := sourceID + "\x00" + key
+	if _, ok := s.items[k]; ok {
+		return false, nil
+	}
+	s.items[k] = now
+	return true, nil
+}
+
+func (s *ItemStore) Prune(_ context.Context, olderThan time.Time) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var n int64
+	for k, t := range s.items {
+		if t.Before(olderThan) {
+			delete(s.items, k)
+			n++
+		}
+	}
+	return n, nil
 }

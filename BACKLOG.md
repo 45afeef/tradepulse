@@ -11,7 +11,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 - Tests: existing unit tests. Security/cost: none.
 
 ### TP-002 — WebSocket end-to-end test
-- Status: Review (implemented in 0.3.0-dev; unverified — see CHANGELOG/TESTING) · P0 · M0 · Depends: TP-001
+- Status: Done (owner-confirmed working, 2026-10-17)
 - Acceptance:
   - [ ] test: register → set subscription/profile → ticket → WS connect → receives a feed item
   - [ ] ticket reuse and bad origin rejected
@@ -43,14 +43,14 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
   - [ ] non-market demo works with zero core changes
 
 ### TP-007 — PostgreSQL + migrations
-- Status: Review (implemented in 0.4.0-dev; not yet confirmed by running)
+- Status: Done (owner-confirmed working, 2026-10-17)
 - Acceptance:
   - [ ] ADR for pgx + migration tool; fresh DB migrates; up/down tested in CI
   - [ ] repositories behind existing interfaces; parameterized SQL only; compose `postgres` service
   - [ ] `/readyz` checks DB; restart loses nothing
 
 ### TP-008 — Roles, status, invites
-- Status: Review (implemented in 0.3.0-dev; unverified — see CHANGELOG/TESTING) · P0 · M2 · Depends: TP-007
+- Status: Done (owner-confirmed working, 2026-10-17)
 - Acceptance:
   - [ ] invites: 128-bit random, hashed at rest, single-use, expiry, optional email bind
   - [ ] concurrent redeem of one code succeeds exactly once (race test)
@@ -58,33 +58,33 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
   - [ ] suspended users rejected on API and WebSocket
 
 ### TP-009 — Admin API, first-admin bootstrap, audit log
-- Status: Review (implemented in 0.3.0-dev; unverified — see CHANGELOG/TESTING) · P0 · M2 · Depends: TP-008
+- Status: Done (owner-confirmed working, 2026-10-17)
 - Acceptance:
   - [ ] `/admin/*` returns 403 for members; every admin action audited
   - [ ] first admin only via startup bootstrap env (D-015); per-account login throttling (follow-up)
 
 ### TP-010 — Safe fetcher (SSRF guard)
-- Status: Review (implemented in 0.4.0-dev; not yet confirmed by running)
+- Status: Done (owner-confirmed working, 2026-10-17)
 - Acceptance:
   - [ ] http/https, ports 80/443; blocks loopback, RFC1918, link-local, 169.254.169.254, metadata.google.internal
   - [ ] DNS resolved and IP pinned; redirects re-validated (max 3); 10 s timeout; 2 MB cap
   - [ ] table-driven tests incl. DNS-rebinding and redirect-to-internal cases
 
 ### TP-011 — Source model, admin CRUD, run history, health
-- Status: Proposed · P0 · M3 · Depends: TP-010
+- Status: Review (implemented in 0.5.0-dev; not yet confirmed by running)
 - Acceptance:
   - [ ] sources stored in DB with `secret_ref` (never the secret); enable/disable; test-fetch
   - [ ] `source_runs` recorded; `/admin/health` shows last success, error rate, items/day
 
 ### TP-012 — Raw store, dedupe, silence watchdog
-- Status: Proposed · P0 · M3 · Depends: TP-011
+- Status: Review (implemented in 0.5.0-dev; not yet confirmed by running)
 - Acceptance:
   - [ ] unique `(source_id, dedupe_key)`; replay/restart creates no duplicates
   - [ ] watchdog alerts admins when an enabled source is silent beyond N× interval
   - [ ] raw retention job
 
 ### TP-013 — RSS/Atom connector · TP-014 — Web-page monitor · TP-015 — Manual post
-- Status: Proposed · P0 · M3 · Depends: TP-012
+- Status: Review (implemented in 0.5.0-dev; not yet confirmed by running)
 - Acceptance (each):
   - [ ] uses safefetch; conditional GET (RSS); robots.txt respected by default (web monitor); min interval 5 min
   - [ ] fixture-based tests, no live network; per-source note in `docs/sources/`
@@ -99,7 +99,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 - Stop condition: paid credentials needed → ask owner.
 
 ### TP-017 — API documentation inside /docs
-- Status: Review (implemented in 0.3.0-dev; unverified) · P0 · M2
+- Status: Done (owner-confirmed working, 2026-10-17)
 - Goal: a new developer can understand and use the API from `/docs` alone.
 - Acceptance:
   - [x] overview with quick start, auth, subscriptions guide, WebSocket protocol, errors, admin flow
@@ -109,7 +109,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 - Rule going forward: new endpoints are not "done" without docs text (see AGENTS.md).
 
 ### TP-018 — Source scheduler with per-source intervals (Q-07, D-022)
-- Status: Proposed · P0 · M3 · Depends: TP-011
+- Status: Review (implemented in 0.5.0-dev; not yet confirmed by running)
 - Acceptance:
   - [ ] each source has `poll_interval_seconds` validated against `SOURCE_MIN/MAX_INTERVAL_SECONDS`
   - [ ] scheduler runs sources independently (one slow source never delays another), with jitter and per-host rate limit
@@ -129,3 +129,8 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
   - [ ] manual-dispatch + tag-based workflow using Workload Identity Federation (no JSON keys)
   - [ ] project/region/service from GitHub variables (`GCP_PROJECT_ID`, `GCP_REGION`, `CLOUD_RUN_SERVICE`), secrets from Secret Manager
   - [ ] smoke test on `/readyz`; rollback = previous revision (documented)
+
+### TP-021 — Enable and tune the three owner sources (M3 gate, owner + agent)
+- Status: Ready · P0 · M3 · Depends: owner runs 0.5.0-dev
+- Steps: (1) find each site's official feed or page structure with `POST /admin/sources/test`; (2) check terms/robots and record in `docs/sources/news-pages.md`; (3) create the sources (disabled), test, enable, subscribe, watch the live feed.
+- Acceptance: [ ] Moneycontrol, [ ] CNBC, [ ] scanx.trade each deliver new items live without duplicates for 24 h

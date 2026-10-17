@@ -6,8 +6,57 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.5.0-dev] — 2026-10-17 — M3 Sources: model, scheduler, RSS/Atom + page monitor connectors, manual posts (TP-011, 012, 013, 014, 015, 018)
+**Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox). Owner has verified everything up to 0.4.0-dev. Run `docker compose run --rm tidy` (new deps: goquery, cascadia, x/net) then `check`.
+**Suggested commit message:**
+```
+feat(sources): configurable sources, per-source scheduler, RSS/Atom and page-monitor connectors
+
+- source model + admin API (create, test draft, update, run-now, delete, health) and member catalog
+- scheduler: per-source intervals, independent bounded runs, per-host spacing, failure back-off, adaptive interval, silence watchdog
+- ingestion semantics: baseline first run, stale-item guard, atomic dedupe (Postgres PK), run history, retention
+- connectors: RSS/Atom (conditional GET, sanitized text, safe links) and web monitor (CSS selectors, robots.txt) via safefetch
+- manual posts through manual sources; migration 0002 with RLS
+- fix(safefetch): scheme checked before host; ValidateURL for config-time checks
+- 39 new tests (23 security)
+```
+
+### Why
+M3 delivers the product's core promise: connect real sources without a deploy and see new items live. Latency is configurable per source (D-022); everything fetched goes through the SSRF-safe fetcher (D-026).
+
+### Added
+- **Domain** `sourcedef`: `Source` (permanent slug name, type `rss|webmonitor|manual`, URL, interval, topics, web selectors), `State`, `Run`, repositories, `Normalize` and `Health` (ok/pending/degraded/failing/overdue/disabled).
+- **Connectors** (`internal/connector`): RSS 2.0 + Atom (encoding/xml: no DTD/entity expansion, charset decoding, 100-item cap, conditional GET with ETag/Last-Modified), web monitor (goquery CSS selectors, validated; relative links resolved), `Robots` (robots.txt groups, longest match, wildcards, cached, fails closed on 5xx), text sanitizing (`stripTags`, `safeLink`: plain http(s) only, no credentials).
+- **Scheduler** (`internal/ingestion/scheduler.go`): each source on its own interval; parallelism cap; one fetch per source at a time; per-host spacing (2 s default); ±10% jitter; failure back-off (30 s doubling, capped by the source's interval, floored at the global minimum); interval stretches after 10/30 unchanged runs; per-run timeout; watchdog logs on failing/overdue; hourly pruning (30 days) of runs and raw items.
+- **Ingestion rules (D-029):** first success is a baseline; items older than 48 h never published; dedupe by `(source, key)` before publishing; storage errors fail the run without advancing state.
+- **Storage:** migration `0002_sources` (sources, source_runs, source_items; RLS + revokes); Postgres and in-memory repositories.
+- **API** (all documented in /docs): `GET /sources` (members), admin `POST/GET /admin/sources`, `GET/PUT/DELETE /admin/sources/{id}`, `POST /admin/sources/{id}/run`, `POST /admin/sources/test`, `POST /admin/items`. Sources start disabled; names are permanent; SSRF checks at create/update/test and again at fetch time.
+- **Config:** `FETCH_USER_AGENT` (optional).
+- **Docs:** how to add the three owner sources in `docs/sources/news-pages.md`; decisions D-028…D-031.
+
+### Changed
+- `safefetch.validateURL` reports a disallowed scheme before host problems; new `safefetch.ValidateURL` for configuration-time checks (fix for the failing test the owner reported).
+- `api.Deps` gained `Sources`, `Runs`, `Bus`, `Connectors`; `main.go` wires the fetcher, connectors and scheduler.
+
+### Security notes
+SSRF guard on every fetch; robots.txt respected by default (override needs a recorded reason, audited via source config); feed/HTML content reduced to plain text; links limited to plain http(s); XML entity expansion not possible; catalog never exposes source URLs; admin-only management with audit entries; scheduler isolation prevents one bad source from starving others.
+
+### Known limitations / open items
+- Not yet run against the three real sites: feed URLs, terms of use, robots.txt and CSS selectors must be confirmed (TP-021).
+- Web monitor does not execute JavaScript (pages that render items client-side need a feed or JSON endpoint).
+- Publication is at-most-once (D-029). No per-source secrets yet (needed for X in M4).
+- Subscriptions matching on `source` use the permanent source name; deleting a source stops matching but keeps members' subscriptions.
+
+### Files (main)
+`internal/domain/sourcedef/*` · `internal/connector/*` · `internal/ingestion/scheduler.go` · `internal/storage/{memory/repos.go,postgres/sources.go,postgres/migrations/0002_*}` · `internal/api/{sources,server,docs}.go` · `cmd/server/main.go` · `internal/safefetch/*` · tests · `TESTING.md` · `DECISIONS.md` · `docs/sources/news-pages.md`
+
+### Next
+Owner run + TP-021 (enable the three sources), then M4 (X connector with budget cap, inbound webhook).
+
+---
+
 ## [0.4.0-dev] — 2026-10-17 — PostgreSQL storage via env, migrations, readiness, safe fetcher (TP-007, TP-010) → M2 complete in code
-**Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox); owner has verified M0 and M1 (0.2.0-dev and earlier) on Windows 11. Run `docker compose run --rm check` (it now starts the local `postgres` service and runs the integration tests).
+**Verification:** ✅ owner confirmed working on Windows 11 (2026-10-17), including data persisting across restarts (one safefetch test needed the scheme-order fix, shipped in 0.5.0-dev).
 **Suggested commit message:**
 ```
 feat(storage): managed PostgreSQL via env, embedded migrations, readiness, SSRF-safe fetcher
@@ -65,7 +114,7 @@ Owner run of `check` → M3 sources: TP-011 (source model + admin CRUD), TP-012,
 ---
 
 ## [0.3.0-dev] — 2026-10-16 — Invite-only access, roles, admin API, audit, API docs (TP-002, TP-008, TP-009, TP-017)
-**Verification:** ⚠️ not compiled or run (no Go toolchain in the authoring sandbox). Run `docker compose run --rm check` first.
+**Verification:** ✅ owner confirmed working on Windows 11 (2026-10-17).
 **Suggested commit message:**
 ```
 feat(access): invite-only registration, roles, suspension, admin API, audit log

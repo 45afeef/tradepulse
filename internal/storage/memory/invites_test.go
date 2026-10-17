@@ -12,6 +12,7 @@ import (
 
 	"tradepulse/internal/domain/audit"
 	"tradepulse/internal/domain/invite"
+	"tradepulse/internal/domain/sourcedef"
 )
 
 func mkInvite(t *testing.T, r *InviteRepo, email string, ttl time.Duration) string {
@@ -122,5 +123,78 @@ func TestAuditRepoOrderAndCap(t *testing.T) {
 	got, _ := r.Recent(ctx, 10)
 	if len(got) != 3 || got[0].ID != "4" || got[2].ID != "2" {
 		t.Fatalf("unexpected: %+v", got)
+	}
+}
+
+// ---- sources ----
+
+func TestSourceRepoCRUDAndIndependentState(t *testing.T) {
+	r := NewSourceRepo()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	src := sourcedef.Source{ID: "s1", Name: "cnbc", Type: sourcedef.TypeRSS, URL: "https://a.example/f", IntervalSeconds: 300, CreatedAt: now, UpdatedAt: now}
+	if err := r.Create(ctx, src); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Create(ctx, sourcedef.Source{ID: "s2", Name: "cnbc"}); !errors.Is(err, sourcedef.ErrNameTaken) {
+		t.Fatalf("duplicate name: %v", err)
+	}
+	st := sourcedef.State{ConsecutiveFailures: 2, ETag: "e"}
+	if err := r.SaveState(ctx, "s1", st); err != nil {
+		t.Fatal(err)
+	}
+	upd := src
+	upd.URL, upd.Enabled, upd.IntervalSeconds = "https://b.example/f", true, 600
+	if err := r.Update(ctx, upd); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := r.Get(ctx, "s1")
+	if got.URL != "https://b.example/f" || !got.Enabled || got.State.ConsecutiveFailures != 2 {
+		t.Fatalf("Update must not touch state and vice versa: %+v", got)
+	}
+	if byName, err := r.GetByName(ctx, "cnbc"); err != nil || byName.ID != "s1" {
+		t.Fatalf("GetByName: %v", err)
+	}
+	if err := r.Delete(ctx, "s1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Get(ctx, "s1"); !errors.Is(err, sourcedef.ErrNotFound) {
+		t.Fatal("deleted source still present")
+	}
+	if err := r.Create(ctx, sourcedef.Source{ID: "s3", Name: "cnbc"}); err != nil {
+		t.Fatalf("name must be reusable after delete: %v", err)
+	}
+}
+
+func TestItemStoreDedupesAndPrunes(t *testing.T) {
+	s := NewItemStore()
+	ctx := context.Background()
+	now := time.Now()
+	if ok, _ := s.Insert(ctx, "a", "k", nil, now); !ok {
+		t.Fatal("first insert must be new")
+	}
+	if ok, _ := s.Insert(ctx, "a", "k", nil, now); ok {
+		t.Fatal("duplicate must be rejected")
+	}
+	if ok, _ := s.Insert(ctx, "b", "k", nil, now); !ok {
+		t.Fatal("same key in another source is a different item")
+	}
+	var wg sync.WaitGroup
+	var wins atomic.Int32
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if ok, _ := s.Insert(ctx, "c", "race", nil, now); ok {
+				wins.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	if wins.Load() != 1 {
+		t.Fatalf("concurrent inserts won %d times, want exactly 1", wins.Load())
+	}
+	if n, _ := s.Prune(ctx, now.Add(time.Hour)); n != 4 {
+		t.Fatalf("pruned %d, want 4", n)
 	}
 }
