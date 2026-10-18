@@ -158,3 +158,74 @@ func TestRunRepoRecentPruneAndCascadeDelete(t *testing.T) {
 		t.Fatalf("%d rows survived deleting their source", left)
 	}
 }
+
+func TestWebhookXConfigCursorAndSecretVersion(t *testing.T) {
+	pool := testPool(t)
+	r := NewSourceRepo(pool)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	hook := sourcedef.Source{ID: idgen.New(), Name: "hook", Type: sourcedef.TypeWebhook, Enabled: true, Webhook: &sourcedef.WebhookConfig{Auth: "token"}, CreatedAt: now, UpdatedAt: now}
+	xs := sourcedef.Source{ID: idgen.New(), Name: "modi", Type: sourcedef.TypeX, Enabled: true, IntervalSeconds: 300, X: &sourcedef.XConfig{Handle: "narendramodi", UserID: "55"}, CreatedAt: now, UpdatedAt: now}
+	for _, s := range []sourcedef.Source{hook, xs} {
+		if err := r.Create(ctx, s); err != nil {
+			t.Fatalf("create %s: %v", s.Type, err)
+		}
+	}
+	got, _ := r.Get(ctx, hook.ID)
+	if got.Webhook == nil || got.Webhook.Auth != "token" || got.SecretVersion != 1 {
+		t.Fatalf("webhook config: %+v", got)
+	}
+	v, err := r.BumpSecretVersion(ctx, hook.ID)
+	if err != nil || v != 2 {
+		t.Fatalf("bump: %d %v", v, err)
+	}
+	if _, err := r.BumpSecretVersion(ctx, "nope"); err != sourcedef.ErrNotFound {
+		t.Fatalf("unknown id: %v", err)
+	}
+	if err := r.SaveState(ctx, xs.ID, sourcedef.State{Cursor: "1846987139428637184", ItemsTotal: 3}); err != nil {
+		t.Fatal(err)
+	}
+	gx, _ := r.Get(ctx, xs.ID)
+	if gx.X == nil || gx.X.UserID != "55" || gx.State.Cursor != "1846987139428637184" {
+		t.Fatalf("x config/cursor: %+v", gx)
+	}
+	upd := gx
+	upd.X = &sourcedef.XConfig{Handle: "elonmusk", UserID: "44"}
+	upd.UpdatedAt = now
+	if err := r.Update(ctx, upd); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := r.Get(ctx, xs.ID); g.X.Handle != "elonmusk" || g.State.Cursor == "" {
+		t.Fatalf("update must change config but keep the cursor: %+v", g)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE sources SET type = 'ftp' WHERE id = $1`, xs.ID); err == nil {
+		t.Fatal("CHECK constraint must still reject unknown types")
+	}
+}
+
+func TestUsageLedgerIsAtomicAndMonthly(t *testing.T) {
+	pool := testPool(t)
+	u := NewUsageRepo(pool)
+	ctx := context.Background()
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := u.Add(ctx, "x", 1000, now); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if got, err := u.Month(ctx, "x", now); err != nil || got != 50000 {
+		t.Fatalf("concurrent upserts lost updates: %d %v", got, err)
+	}
+	if got, _ := u.Month(ctx, "x", now.AddDate(0, 1, 0)); got != 0 {
+		t.Fatalf("next month must be empty: %d", got)
+	}
+	if total, _ := u.Add(ctx, "x", 500, now); total != 50500 {
+		t.Fatalf("Add must return the new total: %d", total)
+	}
+}

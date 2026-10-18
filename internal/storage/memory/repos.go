@@ -251,6 +251,9 @@ func (r *SourceRepo) Create(_ context.Context, s sourcedef.Source) error {
 	if _, ok := r.byName[s.Name]; ok {
 		return sourcedef.ErrNameTaken
 	}
+	if s.SecretVersion == 0 {
+		s.SecretVersion = 1
+	}
 	r.byID[s.ID] = s
 	r.byName[s.Name] = s.ID
 	return nil
@@ -295,6 +298,7 @@ func (r *SourceRepo) Update(_ context.Context, s sourcedef.Source) error {
 		return sourcedef.ErrNotFound
 	}
 	cur.URL, cur.Enabled, cur.IntervalSeconds, cur.Entities, cur.Web, cur.UpdatedAt = s.URL, s.Enabled, s.IntervalSeconds, s.Entities, s.Web, s.UpdatedAt
+	cur.Webhook, cur.X = s.Webhook, s.X
 	r.byID[s.ID] = cur
 	return nil
 }
@@ -321,6 +325,18 @@ func (r *SourceRepo) SaveState(_ context.Context, id string, st sourcedef.State)
 	s.State = st
 	r.byID[id] = s
 	return nil
+}
+
+func (r *SourceRepo) BumpSecretVersion(_ context.Context, id string) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	s, ok := r.byID[id]
+	if !ok {
+		return 0, sourcedef.ErrNotFound
+	}
+	s.SecretVersion++
+	r.byID[id] = s
+	return s.SecretVersion, nil
 }
 
 type RunRepo struct {
@@ -395,4 +411,27 @@ func (s *ItemStore) Prune(_ context.Context, olderThan time.Time) (int64, error)
 		}
 	}
 	return n, nil
+}
+
+// UsageRepo tracks monthly paid-API spend (micro-USD).
+type UsageRepo struct {
+	mu sync.Mutex
+	m  map[string]int64
+}
+
+func NewUsageRepo() *UsageRepo { return &UsageRepo{m: map[string]int64{}} }
+
+func usageKey(key string, now time.Time) string { return now.UTC().Format("2006-01") + "|" + key }
+
+func (u *UsageRepo) Add(_ context.Context, key string, micro int64, now time.Time) (int64, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.m[usageKey(key, now)] += micro
+	return u.m[usageKey(key, now)], nil
+}
+
+func (u *UsageRepo) Month(_ context.Context, key string, now time.Time) (int64, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.m[usageKey(key, now)], nil
 }

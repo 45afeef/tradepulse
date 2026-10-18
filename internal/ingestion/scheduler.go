@@ -140,7 +140,7 @@ func (s *Scheduler) Tick(ctx context.Context) {
 	now := s.cfg.Now()
 	for _, src := range list {
 		s.watchdog(src, now)
-		if !src.Enabled || src.Type == sourcedef.TypeManual {
+		if !src.Enabled || src.Type == sourcedef.TypeManual || src.Type == sourcedef.TypeWebhook {
 			continue
 		}
 		if src.State.NextRunAt != nil && now.Before(*src.State.NextRunAt) {
@@ -283,6 +283,9 @@ func (s *Scheduler) RunOnce(ctx context.Context, src sourcedef.Source) {
 	st := src.State
 	st.LastRunAt, st.LastSuccessAt = &now, &now
 	st.LastError, st.ConsecutiveFailures = "", 0
+	if res.Cursor != "" {
+		st.Cursor = res.Cursor
+	}
 	if res.ETag != "" || res.LastModified != "" {
 		st.ETag, st.LastModified = res.ETag, res.LastModified
 	}

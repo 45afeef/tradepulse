@@ -356,3 +356,27 @@ func TestPrunesOldRunsAndItems(t *testing.T) {
 		t.Fatal("recent item must be kept")
 	}
 }
+
+func TestCursorIsPersistedAndPushSourcesAreNeverPolled(t *testing.T) {
+	f := newFixture(t, nil)
+	ctx := context.Background()
+	src := f.add("xacct", "https://x.example/f", 300)
+	f.conn.set(src.URL, connector.Result{Cursor: "777", Items: []connector.Item{item("1", "post", time.Minute, *f.clock)}}, nil)
+	f.s.RunOnce(ctx, src)
+	if got := f.reload(src.ID).State.Cursor; got != "777" {
+		t.Fatalf("cursor = %q", got)
+	}
+	f.conn.set(src.URL, connector.Result{NotModified: true}, nil) // no new cursor: keep the old one
+	f.s.RunOnce(ctx, f.reload(src.ID))
+	if got := f.reload(src.ID).State.Cursor; got != "777" {
+		t.Fatalf("cursor lost: %q", got)
+	}
+	hook := sourcedef.Source{ID: idgen.New(), Name: "hook", Type: sourcedef.TypeWebhook, Enabled: true, CreatedAt: *f.clock}
+	_ = f.sources.Create(ctx, hook)
+	before := f.conn.count("")
+	f.s.Tick(ctx)
+	f.s.Wait()
+	if f.conn.count("") != before {
+		t.Fatal("webhook (push) sources must never be polled")
+	}
+}

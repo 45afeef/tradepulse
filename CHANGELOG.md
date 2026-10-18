@@ -6,6 +6,53 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.6.0-dev] — 2026-10-17 — M4: inbound webhooks and X connector (TP-016, TP-022)
+**Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox). Owner verified up to 0.4.0-dev; 0.5.0-dev was delivered but not yet reported. Run `docker compose run --rm check` (no new dependencies since 0.5.0-dev).
+**Suggested commit message:**
+```
+feat(m4): inbound webhooks and budget-capped X connector, configured by env
+
+- webhook sources: POST /api/v1/hooks/{name}, hmac (replay window) or token auth, derived secrets (nothing stored), rotation, identical 401s, 64 KB + per-source rate limits, idempotent retries
+- X connector (official API only): enabled by X_BEARER_TOKEN, user id resolved on save, since_id cursor, persistent monthly spend ledger checked before every call, page size shrinks to remaining budget
+- usage endpoint, connector cursor in scheduler state, migration 0003 (webhook/x config, secret_version, cursor, usage_monthly with RLS)
+- config: WEBHOOK_SIGNING_KEY, WEBHOOK_RATE_PER_MINUTE, X_COST_PER_RESOURCE_USD, X_MAX_POSTS_PER_FETCH
+- docs: WEBHOOKS.md, x-accounts.md, /docs overview section; 31 new tests (21 security)
+```
+
+### Why
+The owner will feed items through their own automation (webhooks) and wants the X connector built and ready, configured purely by environment, without risk of runaway API spend.
+
+### Added
+- **Webhooks:** source type `webhook`. `POST /api/v1/hooks/{name}` accepts `{id?, title, summary?, url?, entities?, published_at?}`. Auth `hmac` (default: `X-TP-Timestamp` within 5 min + `X-TP-Signature: sha256=` over `timestamp.body`) or `token` (`X-Webhook-Token` / Bearer). Secrets are derived from `WEBHOOK_SIGNING_KEY` + source id + version, never stored; shown once at creation and on `POST /admin/sources/{id}/webhook-secret` (rotation kills the old secret). Unknown, disabled and wrong-secret requests all get the same 401. Dedupe by `id` or title+url; 64 KB cap; per-source rate limit; source stats updated; deliveries publish normal `content_item` events.
+- **X connector:** source type `x` (`x.handle`); exists only when `X_BEARER_TOKEN` is set. Handle resolved to a user id when the source is saved (client-supplied ids ignored; same handle on update keeps the id, no extra billed read). Polling uses `since_id` (cursor persisted in source state), excludes retweets/replies, and every call is checked against a persistent monthly ledger first; when fewer than 5 posts are affordable polling stops with a clear error. Errors never contain the token.
+- **Usage ledger:** `usage_monthly` (Postgres) / memory; `GET /api/v1/admin/usage`.
+- **Scheduler:** persists connector cursors, never polls webhook sources.
+- **Config (env):** `WEBHOOK_SIGNING_KEY`, `WEBHOOK_RATE_PER_MINUTE`, `X_COST_PER_RESOURCE_USD`, `X_MAX_POSTS_PER_FETCH` (plus existing `X_BEARER_TOKEN`, `X_API_BASE_URL`, `X_MONTHLY_BUDGET_USD`). `LogValue` redacts the new secrets.
+- **Docs:** `docs/WEBHOOKS.md`, `docs/sources/x-accounts.md` (how to add the three accounts), /docs overview section; decisions D-032…D-034.
+- **Tests:** 31 new (see `TESTING.md`).
+
+### Changed
+- `sourcedef.Source` gained `Webhook`, `X`, `SecretVersion`; `State` gained `Cursor`; `Repository` gained `BumpSecretVersion`; new `UsageStore`.
+- `connector.Item` gained `Entities`; `Result` gained `Cursor`; `HashKey` exported; new optional `Resolver` interface.
+- Source API accepts types `webhook` and `x`; responses show `webhook_path`, `webhook_secret` (create/rotate only), `x`.
+- Migration `0003` (relaxes the type CHECK, adds columns and `usage_monthly`, RLS + revokes).
+
+### Security notes
+Webhook secrets never stored, logged, listed or audited; constant-time comparisons; replay window + idempotent dedupe; uniform failure response; bounded bodies and rates. X token only from env, redacted from errors; paid calls gated by a persistent budget (also across restarts and instances); user ids are never taken from the client.
+
+### Known limitations / open items
+- X connector has not been run against the real API (owner is not testing X yet): response shapes follow the documented v2 format; endpoint access depends on your X plan. Pricing is configured by env, not fetched.
+- Terms of use for X and the three news sites still need to be checked before production use.
+- Webhook endpoint is a plain handler (not an OpenAPI operation), documented in the overview and `docs/WEBHOOKS.md`.
+
+### Files (main)
+`internal/webhook/*` · `internal/connector/x.go` · `internal/api/{hooks,sources,server,docs}.go` · `internal/domain/sourcedef/sourcedef.go` · `internal/storage/{memory/repos.go,postgres/sources.go,postgres/migrations/0003_*}` · `internal/ingestion/scheduler.go` · `internal/config/config.go` · `cmd/server/main.go` · `docs/WEBHOOKS.md` · `docs/sources/x-accounts.md` · tests
+
+### Next
+Owner run of `check`; send a real webhook delivery; then M5 (alerts and channels).
+
+---
+
 ## [0.5.0-dev] — 2026-10-17 — M3 Sources: model, scheduler, RSS/Atom + page monitor connectors, manual posts (TP-011, 012, 013, 014, 015, 018)
 **Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox). Owner has verified everything up to 0.4.0-dev. Run `docker compose run --rm tidy` (new deps: goquery, cascadia, x/net) then `check`.
 **Suggested commit message:**

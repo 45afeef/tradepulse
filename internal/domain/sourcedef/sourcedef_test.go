@@ -106,3 +106,42 @@ func TestHealth(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeWebhookAndXSources(t *testing.T) {
+	hook, err := Source{Name: "n8n-feed", Type: TypeWebhook, URL: "https://ignored", IntervalSeconds: 99, Web: &WebConfig{ItemSelector: "a"}}.Normalize(bounds)
+	if err != nil || hook.URL != "" || hook.IntervalSeconds != 0 || hook.Webhook == nil || hook.Webhook.Auth != "hmac" || hook.Web != nil {
+		t.Fatalf("webhook defaults: %+v %v", hook, err)
+	}
+	tok, err := Source{Name: "zap", Type: TypeWebhook, Webhook: &WebhookConfig{Auth: " TOKEN "}}.Normalize(bounds)
+	if err != nil || tok.Webhook.Auth != "token" {
+		t.Fatalf("token mode: %+v %v", tok.Webhook, err)
+	}
+	x, err := Source{Name: "modi", Type: TypeX, URL: "http://ignored", IntervalSeconds: 300, X: &XConfig{Handle: " @NarendraModi ", UserID: "123"}}.Normalize(bounds)
+	if err != nil || x.URL != "" || x.X.Handle != "NarendraModi" || x.X.UserID != "123" {
+		t.Fatalf("x: %+v %v", x.X, err)
+	}
+	rss, _ := Source{Name: "plain", Type: TypeRSS, URL: "https://example.com/f", IntervalSeconds: 300, X: &XConfig{Handle: "a"}, Webhook: &WebhookConfig{Auth: "hmac"}}.Normalize(bounds)
+	if rss.X != nil || rss.Webhook != nil {
+		t.Fatal("type-specific config must be cleared on other types")
+	}
+}
+
+func TestNormalizeRejectsBadWebhookAndXConfig(t *testing.T) {
+	bad := map[string]Source{
+		"auth mode":        {Name: "h1", Type: TypeWebhook, Webhook: &WebhookConfig{Auth: "none"}},
+		"x missing":        {Name: "x1", Type: TypeX, IntervalSeconds: 300},
+		"x bad handle":     {Name: "x2", Type: TypeX, IntervalSeconds: 300, X: &XConfig{Handle: "bad handle"}},
+		"x long handle":    {Name: "x3", Type: TypeX, IntervalSeconds: 300, X: &XConfig{Handle: "abcdefghijklmnop"}},
+		"x bad user id":    {Name: "x4", Type: TypeX, IntervalSeconds: 300, X: &XConfig{Handle: "abc", UserID: "12;DROP"}},
+		"x interval low":   {Name: "x5", Type: TypeX, IntervalSeconds: 5, X: &XConfig{Handle: "abc"}},
+		"x interval high":  {Name: "x6", Type: TypeX, IntervalSeconds: 10 * 86400, X: &XConfig{Handle: "abc"}},
+	}
+	for name, s := range bad {
+		if _, err := s.Normalize(bounds); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	if (Source{Type: TypeWebhook, Enabled: true}).Health(time.Now()) != "ok" {
+		t.Error("webhook sources have no schedule and are ok when enabled")
+	}
+}

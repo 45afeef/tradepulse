@@ -90,6 +90,9 @@ internal/storage/memory, internal/infrastructure/eventbus   replaceable implemen
 ### Database
 Dev uses the local `postgres` compose service automatically. To use a managed database (Supabase now, any provider later) set `DATABASE_URL` (and `DATABASE_MIGRATION_URL`) in `.env`: nothing else changes. Production **requires** `DATABASE_URL`. Details, Supabase setup and security notes: [`docs/DATABASE.md`](docs/DATABASE.md). Migrations run automatically at startup; `docker compose run --rm check` also runs the Postgres integration tests.
 
+### Sources, webhooks and X
+Admins add sources in `/docs` (RSS, web pages, manual, **webhook**, **x**); see `docs/sources/` and [`docs/WEBHOOKS.md`](docs/WEBHOOKS.md). Webhooks need `WEBHOOK_SIGNING_KEY`; X needs `X_BEARER_TOKEN` and is spend-capped by `X_MONTHLY_BUDGET_USD`.
+
 ### Access control (invite-only)
 - Admin creates a single-use invite (optionally bound to an email, expiring in 7 days by default); the code is shown **once** and stored only as a hash.
 - Members register with the code. Suspending a member rejects their token at once, stops matching and closes their WebSockets. All admin actions are in the audit log (`GET /api/v1/admin/audit`).

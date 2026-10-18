@@ -29,6 +29,7 @@ type Item struct {
 	Summary     string
 	URL         string
 	PublishedAt time.Time // zero when unknown
+	Entities    []string  // extra topics (merged with the source's own)
 	Raw         []byte    // normalized JSON snapshot kept in the raw store
 }
 
@@ -38,11 +39,18 @@ type Result struct {
 	ETag         string
 	LastModified string
 	HTTPStatus   int
+	Cursor       string // new cursor to persist (e.g. X since_id); empty keeps the old one
 }
 
 type Connector interface {
 	Type() sourcedef.Type
 	Fetch(ctx context.Context, src sourcedef.Source) (Result, error)
+}
+
+// Resolver is optionally implemented by connectors that must look something up when a
+// source is saved (e.g. X handle -> user id). The returned source carries the result.
+type Resolver interface {
+	Resolve(ctx context.Context, src sourcedef.Source) (sourcedef.Source, error)
 }
 
 // Validator is optionally implemented by connectors to check type-specific config.
@@ -72,7 +80,7 @@ func (r *Registry) Validate(src sourcedef.Source) error {
 	}
 	c, ok := r.byType[src.Type]
 	if !ok {
-		return fmt.Errorf("no connector available for type %q", src.Type)
+		return fmt.Errorf("no connector available for type %q (is it configured on this server?)", src.Type)
 	}
 	if v, ok := c.(Validator); ok {
 		return v.Validate(src)
@@ -87,14 +95,26 @@ func ItemEvent(src sourcedef.Source, it Item, now time.Time) event.Event {
 	if ts.IsZero() || ts.After(now.Add(5*time.Minute)) {
 		ts = now
 	}
-	ev := event.New("content_item", src.Name, append([]string(nil), src.Entities...), ts.UTC(), nil)
+	ents := append([]string(nil), src.Entities...)
+	seen := map[string]bool{}
+	for _, e := range ents {
+		seen[e] = true
+	}
+	for _, e := range it.Entities {
+		if n := event.NormEntity(e); n != "" && !seen[n] {
+			seen[n] = true
+			ents = append(ents, n)
+		}
+	}
+	ev := event.New("content_item", src.Name, ents, ts.UTC(), nil)
 	ev.Title, ev.Summary, ev.URL, ev.DedupeKey = it.Title, it.Summary, it.URL, it.Key
 	return ev
 }
 
 var ErrNotFeed = errors.New("response is not an RSS or Atom feed")
 
-func hashKey(parts ...string) string {
+// HashKey builds a stable dedupe key from the given parts.
+func HashKey(parts ...string) string {
 	h := sha256.New()
 	for _, p := range parts {
 		h.Write([]byte(p))

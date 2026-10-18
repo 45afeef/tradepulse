@@ -13,8 +13,9 @@ import (
 )
 
 type fakeHTTP struct {
-	pages map[string]*safefetch.Response
-	errs  map[string]error
+	pages    map[string]*safefetch.Response
+	prefixes map[string]*safefetch.Response
+	errs     map[string]error
 	calls []string
 	hdrs  []http.Header
 }
@@ -31,6 +32,13 @@ func (f *fakeHTTP) Get(_ context.Context, u string, h http.Header) (*safefetch.R
 			cp.FinalURL = u
 		}
 		return &cp, nil
+	}
+	for pre, r := range f.prefixes {
+		if strings.HasPrefix(u, pre) {
+			cp := *r
+			cp.FinalURL = u
+			return &cp, nil
+		}
 	}
 	return &safefetch.Response{Status: 404, FinalURL: u}, nil
 }

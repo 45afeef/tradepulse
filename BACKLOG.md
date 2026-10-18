@@ -91,7 +91,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
   - [ ] web monitor: CSS selectors for item/title/link/time, selector test-fetch in admin API
 
 ### TP-016 — X account connector with budgets
-- Status: Blocked (Q-02, Q-03: handles, X developer account, budget) · P0 · M4 · Depends: TP-012
+- Status: Review (implemented in 0.6.0-dev; owner has not tested X)
 - Acceptance:
   - [ ] official API only; `since_id` polling; per-source monthly + global hard budget
   - [ ] polling stops at cap and raises an admin health alert; spend metric
@@ -134,3 +134,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 - Status: Ready · P0 · M3 · Depends: owner runs 0.5.0-dev
 - Steps: (1) find each site's official feed or page structure with `POST /admin/sources/test`; (2) check terms/robots and record in `docs/sources/news-pages.md`; (3) create the sources (disabled), test, enable, subscribe, watch the live feed.
 - Acceptance: [ ] Moneycontrol, [ ] CNBC, [ ] scanx.trade each deliver new items live without duplicates for 24 h
+
+### TP-022 — Inbound webhook source (HMAC or token, replay-safe, rotatable)
+- Status: Review (implemented in 0.6.0-dev; not yet confirmed by running)
+- Acceptance: [x] derived secrets, rotation, uniform 401; [x] idempotent retries; [x] limits (64 KB, per-source rate); [x] docs in /docs and `docs/WEBHOOKS.md`; [ ] owner sends a real delivery from their automation

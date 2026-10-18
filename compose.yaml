@@ -55,6 +55,9 @@ services:
       DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:-}
       DB_SIMPLE_PROTOCOL: ${DB_SIMPLE_PROTOCOL:-auto}
       SIM_DEMO: market
+      WEBHOOK_SIGNING_KEY: ${WEBHOOK_SIGNING_KEY:-dev-only-webhook-signing-key-0123456789abcdef}
+      X_BEARER_TOKEN: ${X_BEARER_TOKEN:-}
+      X_MONTHLY_BUDGET_USD: ${X_MONTHLY_BUDGET_USD:-20}
       # DEV ONLY first admin (idempotent). Production: set via Secret Manager, remove after first start.
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@example.com}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-dev-admin-password-change-me}

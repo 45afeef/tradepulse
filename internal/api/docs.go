@@ -44,6 +44,15 @@ Every delivered item has a **reason** explaining which subscription matched.
 ## Sources
 Items come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). §GET /api/v1/sources§ lists the enabled ones: subscribe with kind §source§ and the source's name, or with kind §entity§ and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.
 
+## Inbound webhooks (push items from your own systems)
+An admin creates a source of type §webhook§; the response shows its **secret once** and its path (§/api/v1/hooks/<name>§). Then POST JSON from any system (n8n, Zapier, scripts):
+§§§json
+{"id":"optional-unique-id","title":"Required headline","summary":"optional","url":"https://example.com/story","entities":["topic"],"published_at":"2026-10-17T10:00:00Z"}
+§§§
+- **hmac** (default): send §X-TP-Timestamp§ (unix seconds, within 5 minutes) and §X-TP-Signature: sha256=<hex>§ where hex = HMAC-SHA256(secret, "<timestamp>.<raw body>").
+- **token**: send the secret as §X-Webhook-Token§ or §Authorization: Bearer <secret>§ (for tools that cannot sign).
+- Responses: §201§ accepted, §200§ duplicate (same §id§ or same title+url: safe to retry), §401§ bad credentials (also for unknown sources), §413§ over 64 KB, §422§ invalid payload, §429§ rate limited, §503§ webhooks not enabled on the server. Details and code samples: §docs/WEBHOOKS.md§ in the repository.
+
 ## Real-time (WebSocket)
 1. §POST /api/v1/ws-ticket§ (with your token) → a **one-time ticket valid for 30 seconds**.
 2. Connect to §ws(s)://<host>/ws?ticket=<ticket>§ (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.

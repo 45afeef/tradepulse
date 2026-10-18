@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
@@ -45,6 +46,8 @@ type Deps struct {
 	Runs         sourcedef.RunRepository
 	Bus          event.Bus
 	Connectors   *connector.Registry
+	Items        sourcedef.ItemStore
+	Usage        sourcedef.UsageStore
 	// Ready (optional) checks dependencies for /readyz, e.g. the database ping.
 	Ready func(ctx context.Context) error
 }
@@ -54,6 +57,8 @@ type Server struct {
 	global    *limiter
 	authLim   *limiter
 	dummyHash string
+	hookMu    sync.Mutex
+	hookLims  map[string]*limiter
 }
 
 func New(d Deps) (*Server, error) {
@@ -171,7 +176,8 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 
 	huma.Register(api, huma.Operation{OperationID: "create-source", Method: http.MethodPost, Path: "/api/v1/admin/sources", Tags: []string{"admin"},
 		Summary: "Add a source", Security: secured, Middlewares: admin, DefaultStatus: http.StatusCreated, MaxBodyBytes: small,
-		Description: "Types: `rss` (RSS/Atom feed URL), `webmonitor` (HTML page + CSS selectors; robots.txt respected), `manual` (admin posts). " +
+		Description: "Types: `rss` (RSS/Atom feed URL), `webmonitor` (HTML page + CSS selectors; robots.txt respected), `manual` (admin posts), " +
+			"`webhook` (external systems push items; the signing secret is returned once), `x` (an X account via the official API; needs X_BEARER_TOKEN on the server, spend-capped). " +
 			"`interval_seconds` is per source (bounded by the platform minimum/maximum). The URL must be a public http(s) address (SSRF-checked). " +
 			"The name is a permanent slug that members subscribe to. Sources start **disabled**: use *Test a source draft* first, then enable.",
 		Errors: []int{401, 403, 409, 422}}, s.createSource)
@@ -201,13 +207,22 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 		Summary: "Publish a manual item", Security: secured, Middlewares: admin, DefaultStatus: http.StatusCreated, MaxBodyBytes: small,
 		Description: "Publishes one item through an enabled `manual` source; matching members receive it live. Useful for announcements and corrections.",
 		Errors: []int{401, 403, 404, 409, 422}}, s.postItem)
+	huma.Register(api, huma.Operation{OperationID: "rotate-webhook-secret", Method: http.MethodPost, Path: "/api/v1/admin/sources/{id}/webhook-secret", Tags: []string{"admin"},
+		Summary: "Rotate a webhook source's secret", Security: secured, Middlewares: admin,
+		Description: "Generates a new secret and returns it **once**; the old secret stops working immediately. Only for `webhook` sources.",
+		Errors: []int{401, 403, 404, 409, 422}}, s.rotateWebhookSecret)
+	huma.Register(api, huma.Operation{OperationID: "get-usage", Method: http.MethodGet, Path: "/api/v1/admin/usage", Tags: []string{"admin"},
+		Summary: "Paid API usage this month", Security: secured, Middlewares: admin,
+		Description: "X API spend for the current month against the configured cap (X_MONTHLY_BUDGET_USD). Polling stops automatically when the cap is reached.",
+		Errors: []int{401, 403}}, s.getUsage)
 	return api
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.routes(mux)
-	mux.HandleFunc("GET /ws", s.ws) // WebSocket: plain handler, outside OpenAPI
+	mux.HandleFunc("GET /ws", s.ws)                            // WebSocket: plain handler, outside OpenAPI
+	mux.HandleFunc("POST /api/v1/hooks/{name}", s.hook)       // inbound webhook: signs the raw body, documented in the overview
 
 	var h http.Handler = mux
 	h = bodyLimit(h)

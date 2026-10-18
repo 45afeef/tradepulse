@@ -198,3 +198,37 @@ func TestItemStoreDedupesAndPrunes(t *testing.T) {
 		t.Fatalf("pruned %d, want 4", n)
 	}
 }
+
+func TestSecretVersionAndUsageLedger(t *testing.T) {
+	r := NewSourceRepo()
+	ctx := context.Background()
+	_ = r.Create(ctx, sourcedef.Source{ID: "h", Name: "hook", Type: sourcedef.TypeWebhook})
+	if s, _ := r.Get(ctx, "h"); s.SecretVersion != 1 {
+		t.Fatalf("new sources start at version 1, got %d", s.SecretVersion)
+	}
+	v1, err := r.BumpSecretVersion(ctx, "h")
+	v2, _ := r.BumpSecretVersion(ctx, "h")
+	if err != nil || v1 != 2 || v2 != 3 {
+		t.Fatalf("bump: %d %d %v", v1, v2, err)
+	}
+	if _, err := r.BumpSecretVersion(ctx, "nope"); !errors.Is(err, sourcedef.ErrNotFound) {
+		t.Fatal("unknown id")
+	}
+	u := NewUsageRepo()
+	now := time.Date(2026, 10, 31, 23, 0, 0, 0, time.UTC)
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); _, _ = u.Add(ctx, "x", 1000, now) }()
+	}
+	wg.Wait()
+	if got, _ := u.Month(ctx, "x", now); got != 50000 {
+		t.Fatalf("concurrent adds lost updates: %d", got)
+	}
+	if got, _ := u.Month(ctx, "x", now.Add(2*time.Hour)); got != 0 {
+		t.Fatalf("a new month must start at zero, got %d", got)
+	}
+	if got, _ := u.Month(ctx, "other", now); got != 0 {
+		t.Fatal("keys are separate")
+	}
+}

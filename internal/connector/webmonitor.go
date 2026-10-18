@@ -152,10 +152,10 @@ func extractItem(s *goquery.Selection, base string, cfg sourcedef.WebConfig) (It
 	}
 	key := link
 	if key == "" {
-		key = hashKey(title)
+		key = HashKey(title)
 	}
 	if len(key) > 200 {
-		key = hashKey(key)
+		key = HashKey(key)
 	}
 	raw, _ := json.Marshal(map[string]any{"title": title, "summary": summary, "url": link})
 	return Item{Key: "web:" + key, Title: title, Summary: summary, URL: link, Raw: raw}, true

@@ -765,7 +765,9 @@
             "enum": [
               "rss",
               "webmonitor",
-              "manual"
+              "manual",
+              "webhook",
+              "x"
             ],
             "type": "string"
           },
@@ -780,6 +782,14 @@
           "web": {
             "$ref": "#/components/schemas/WebConfig",
             "description": "Required for webmonitor"
+          },
+          "webhook": {
+            "$ref": "#/components/schemas/WebhookConfig",
+            "description": "Optional for webhook sources (default auth: hmac)"
+          },
+          "x": {
+            "$ref": "#/components/schemas/XConfig",
+            "description": "Required for x sources: the account handle"
           }
         },
         "required": [
@@ -856,6 +866,12 @@
           },
           "web": {
             "$ref": "#/components/schemas/WebConfig"
+          },
+          "webhook": {
+            "$ref": "#/components/schemas/WebhookConfig"
+          },
+          "x": {
+            "$ref": "#/components/schemas/XConfig"
           }
         },
         "required": [
@@ -934,7 +950,9 @@
             "enum": [
               "rss",
               "webmonitor",
-              "manual"
+              "manual",
+              "webhook",
+              "x"
             ],
             "type": "string"
           },
@@ -943,6 +961,20 @@
           },
           "web": {
             "$ref": "#/components/schemas/WebConfig"
+          },
+          "webhook": {
+            "$ref": "#/components/schemas/WebhookConfig"
+          },
+          "webhook_path": {
+            "description": "POST items here (webhook sources)",
+            "type": "string"
+          },
+          "webhook_secret": {
+            "description": "Shown ONLY when the source is created or its secret rotated",
+            "type": "string"
+          },
+          "x": {
+            "$ref": "#/components/schemas/XConfig"
           }
         },
         "required": [
@@ -1126,6 +1158,45 @@
         ],
         "type": "object"
       },
+      "UsageBody": {
+        "additionalProperties": false,
+        "properties": {
+          "month": {
+            "examples": [
+              "2026-10"
+            ],
+            "type": "string"
+          },
+          "x_budget_usd": {
+            "format": "double",
+            "type": "number"
+          },
+          "x_configured": {
+            "type": "boolean"
+          },
+          "x_cost_per_resource_usd": {
+            "format": "double",
+            "type": "number"
+          },
+          "x_remaining_usd": {
+            "format": "double",
+            "type": "number"
+          },
+          "x_spent_usd": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "month",
+          "x_configured",
+          "x_budget_usd",
+          "x_spent_usd",
+          "x_remaining_usd",
+          "x_cost_per_resource_usd"
+        ],
+        "type": "object"
+      },
       "UserListBody": {
         "additionalProperties": false,
         "properties": {
@@ -1187,6 +1258,44 @@
           "item_selector"
         ],
         "type": "object"
+      },
+      "WebhookConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "auth": {
+            "description": "hmac (default, recommended): signed requests with replay protection. token: static secret in a header, for tools that cannot sign.",
+            "enum": [
+              "hmac",
+              "token"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "auth"
+        ],
+        "type": "object"
+      },
+      "XConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "handle": {
+            "description": "Account handle without @",
+            "examples": [
+              "narendramodi"
+            ],
+            "maxLength": 16,
+            "type": "string"
+          },
+          "user_id": {
+            "description": "Resolved automatically when the source is saved",
+            "type": "string"
+          }
+        },
+        "required": [
+          "handle"
+        ],
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -1199,7 +1308,7 @@
     }
   },
   "info": {
-    "description": "\n**TradePulse** collects information from many sources, normalizes it into *events*, and delivers\n**the items relevant to you** in one live feed, with automatic alerts. Access is **invite-only**.\n\n## Quick start (5 minutes)\n1. **Get an invite code** from an administrator (looks like `tp_inv_…`). Codes are single-use and expire.\n2. `POST /api/v1/auth/register` with your email, a password (10+ characters) and the invite code. The response contains a **token**.\n3. Click **Authorize** in this page (or send `Authorization: Bearer \u003ctoken\u003e` on every request).\n4. `GET /api/v1/event-types` shows what kinds of events exist and **which fields you can filter on**.\n5. `PUT /api/v1/me/subscriptions` tells the system what you care about (see *Subscriptions* below). **Until you subscribe, your feed is empty.**\n6. `GET /api/v1/me/feed` returns recent items. For live delivery: `POST /api/v1/ws-ticket`, then open the WebSocket (see *Real-time*).\n\n## Authentication\n- Register or log in to get a JWT; send it as `Authorization: Bearer \u003ctoken\u003e`.\n- Tokens expire (default 12 h); log in again to get a new one.\n- A **suspended** account is rejected everywhere immediately and its live connections are closed.\n- Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see `Retry-After`).\n\n## Subscriptions (what you receive)\nA subscription says *what to watch*; optional **types** and **conditions** narrow it. An item is delivered if **any** subscription matches, unless it is **muted**.\n\n| kind | matches when |\n|---|---|\n| `entity` | the event lists that entity (case-insensitive), e.g. `tcs`, `checkout` |\n| `keyword` | the whole word/phrase appears in the item's title or text, e.g. `repo rate` |\n| `source` | the event comes from that source id, e.g. `status_sim` |\n\n**Conditions** are `field operator value` checks; **all** must hold. Operators: `\u003e` `\u003e=` `\u003c` `\u003c=` `==` `!=` `in` `contains` `any_of`.\nFields come from `GET /api/v1/event-types` (built-in: `type`, `source`, `title`, `summary`, `url`, `entity`; plus each type's own fields).\nIf an event does not have the field, the condition is simply *false*.\n\nExample: notify me when *checkout* is anything other than up:\n```json\n{\"subscriptions\":[{\"kind\":\"entity\",\"value\":\"checkout\",\"conditions\":[{\"field\":\"status\",\"op\":\"!=\",\"value\":\"up\"}]}],\n \"muted\":[\"maintenance\"]}\n```\nEvery delivered item has a **reason** explaining which subscription matched.\n\n## Sources\nItems come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). `GET /api/v1/sources` lists the enabled ones: subscribe with kind `source` and the source's name, or with kind `entity` and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.\n\n## Real-time (WebSocket)\n1. `POST /api/v1/ws-ticket` (with your token) → a **one-time ticket valid for 30 seconds**.\n2. Connect to `ws(s)://\u003chost\u003e/ws?ticket=\u003cticket\u003e` (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.\n3. Messages are JSON text frames:\n```json\n{\"type\":\"connected\"}\n{\"type\":\"feed_item\",\"data\":{\"id\":\"…\",\"title\":\"checkout is down\",\"body\":\"Latency 950 ms\",\"severity\":\"notable\",\"reason\":\"Matched your entity subscription \\\"checkout\\\"\",\"created_at\":\"…\"}}\n```\n4. **Reconnect with backoff** when the connection drops (deploys and idle limits close connections). After reconnecting, call `GET /api/v1/me/feed` to catch up on anything missed.\n5. Limits: at most 5 simultaneous connections per user; slow readers are disconnected. Close code 1008 = policy (cap/suspended), 1001 = server going away.\nThe WebSocket cannot be tried from this page; use a client such as Postman or `websocat`.\n\n## Errors\nErrors use **RFC 9457 problem JSON**: `{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"…\"}`. Validation failures (422) list the offending fields.\nCommon codes: `401` missing/invalid token · `403` not allowed (e.g. not an admin, bad invite) · `409` conflict · `422` invalid input · `429` rate limited · `413` body too large.\n\n## Administrators\nEndpoints under **admin** require the `admin` role (others get 403). Typical flow: create an invite → share the code → watch its status → suspend/reactivate members → review the audit log.\n",
+    "description": "\n**TradePulse** collects information from many sources, normalizes it into *events*, and delivers\n**the items relevant to you** in one live feed, with automatic alerts. Access is **invite-only**.\n\n## Quick start (5 minutes)\n1. **Get an invite code** from an administrator (looks like `tp_inv_…`). Codes are single-use and expire.\n2. `POST /api/v1/auth/register` with your email, a password (10+ characters) and the invite code. The response contains a **token**.\n3. Click **Authorize** in this page (or send `Authorization: Bearer \u003ctoken\u003e` on every request).\n4. `GET /api/v1/event-types` shows what kinds of events exist and **which fields you can filter on**.\n5. `PUT /api/v1/me/subscriptions` tells the system what you care about (see *Subscriptions* below). **Until you subscribe, your feed is empty.**\n6. `GET /api/v1/me/feed` returns recent items. For live delivery: `POST /api/v1/ws-ticket`, then open the WebSocket (see *Real-time*).\n\n## Authentication\n- Register or log in to get a JWT; send it as `Authorization: Bearer \u003ctoken\u003e`.\n- Tokens expire (default 12 h); log in again to get a new one.\n- A **suspended** account is rejected everywhere immediately and its live connections are closed.\n- Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see `Retry-After`).\n\n## Subscriptions (what you receive)\nA subscription says *what to watch*; optional **types** and **conditions** narrow it. An item is delivered if **any** subscription matches, unless it is **muted**.\n\n| kind | matches when |\n|---|---|\n| `entity` | the event lists that entity (case-insensitive), e.g. `tcs`, `checkout` |\n| `keyword` | the whole word/phrase appears in the item's title or text, e.g. `repo rate` |\n| `source` | the event comes from that source id, e.g. `status_sim` |\n\n**Conditions** are `field operator value` checks; **all** must hold. Operators: `\u003e` `\u003e=` `\u003c` `\u003c=` `==` `!=` `in` `contains` `any_of`.\nFields come from `GET /api/v1/event-types` (built-in: `type`, `source`, `title`, `summary`, `url`, `entity`; plus each type's own fields).\nIf an event does not have the field, the condition is simply *false*.\n\nExample: notify me when *checkout* is anything other than up:\n```json\n{\"subscriptions\":[{\"kind\":\"entity\",\"value\":\"checkout\",\"conditions\":[{\"field\":\"status\",\"op\":\"!=\",\"value\":\"up\"}]}],\n \"muted\":[\"maintenance\"]}\n```\nEvery delivered item has a **reason** explaining which subscription matched.\n\n## Sources\nItems come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). `GET /api/v1/sources` lists the enabled ones: subscribe with kind `source` and the source's name, or with kind `entity` and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.\n\n## Inbound webhooks (push items from your own systems)\nAn admin creates a source of type `webhook`; the response shows its **secret once** and its path (`/api/v1/hooks/\u003cname\u003e`). Then POST JSON from any system (n8n, Zapier, scripts):\n```json\n{\"id\":\"optional-unique-id\",\"title\":\"Required headline\",\"summary\":\"optional\",\"url\":\"https://example.com/story\",\"entities\":[\"topic\"],\"published_at\":\"2026-10-17T10:00:00Z\"}\n```\n- **hmac** (default): send `X-TP-Timestamp` (unix seconds, within 5 minutes) and `X-TP-Signature: sha256=\u003chex\u003e` where hex = HMAC-SHA256(secret, \"\u003ctimestamp\u003e.\u003craw body\u003e\").\n- **token**: send the secret as `X-Webhook-Token` or `Authorization: Bearer \u003csecret\u003e` (for tools that cannot sign).\n- Responses: `201` accepted, `200` duplicate (same `id` or same title+url: safe to retry), `401` bad credentials (also for unknown sources), `413` over 64 KB, `422` invalid payload, `429` rate limited, `503` webhooks not enabled on the server. Details and code samples: `docs/WEBHOOKS.md` in the repository.\n\n## Real-time (WebSocket)\n1. `POST /api/v1/ws-ticket` (with your token) → a **one-time ticket valid for 30 seconds**.\n2. Connect to `ws(s)://\u003chost\u003e/ws?ticket=\u003cticket\u003e` (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.\n3. Messages are JSON text frames:\n```json\n{\"type\":\"connected\"}\n{\"type\":\"feed_item\",\"data\":{\"id\":\"…\",\"title\":\"checkout is down\",\"body\":\"Latency 950 ms\",\"severity\":\"notable\",\"reason\":\"Matched your entity subscription \\\"checkout\\\"\",\"created_at\":\"…\"}}\n```\n4. **Reconnect with backoff** when the connection drops (deploys and idle limits close connections). After reconnecting, call `GET /api/v1/me/feed` to catch up on anything missed.\n5. Limits: at most 5 simultaneous connections per user; slow readers are disconnected. Close code 1008 = policy (cap/suspended), 1001 = server going away.\nThe WebSocket cannot be tried from this page; use a client such as Postman or `websocat`.\n\n## Errors\nErrors use **RFC 9457 problem JSON**: `{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"…\"}`. Validation failures (422) list the offending fields.\nCommon codes: `401` missing/invalid token · `403` not allowed (e.g. not an admin, bad invite) · `409` conflict · `422` invalid input · `429` rate limited · `413` body too large.\n\n## Administrators\nEndpoints under **admin** require the `admin` role (others get 403). Typical flow: create an invite → share the code → watch its status → suspend/reactivate members → review the audit log.\n",
     "title": "TradePulse API",
     "version": "0.3.0"
   },
@@ -1667,7 +1776,7 @@
         ]
       },
       "post": {
-        "description": "Types: `rss` (RSS/Atom feed URL), `webmonitor` (HTML page + CSS selectors; robots.txt respected), `manual` (admin posts). `interval_seconds` is per source (bounded by the platform minimum/maximum). The URL must be a public http(s) address (SSRF-checked). The name is a permanent slug that members subscribe to. Sources start **disabled**: use *Test a source draft* first, then enable.",
+        "description": "Types: `rss` (RSS/Atom feed URL), `webmonitor` (HTML page + CSS selectors; robots.txt respected), `manual` (admin posts), `webhook` (external systems push items; the signing secret is returned once), `x` (an X account via the official API; needs X_BEARER_TOKEN on the server, spend-capped). `interval_seconds` is per source (bounded by the platform minimum/maximum). The URL must be a public http(s) address (SSRF-checked). The name is a permanent slug that members subscribe to. Sources start **disabled**: use *Test a source draft* first, then enable.",
         "operationId": "create-source",
         "requestBody": {
           "content": {
@@ -2191,6 +2300,163 @@
           }
         ],
         "summary": "Fetch a source as soon as possible",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/sources/{id}/webhook-secret": {
+      "post": {
+        "description": "Generates a new secret and returns it **once**; the old secret stops working immediately. Only for `webhook` sources.",
+        "operationId": "rotate-webhook-secret",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rotate a webhook source's secret",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/usage": {
+      "get": {
+        "description": "X API spend for the current month against the configured cap (X_MONTHLY_BUDGET_USD). Polling stops automatically when the cap is reached.",
+        "operationId": "get-usage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Paid API usage this month",
         "tags": [
           "admin"
         ]

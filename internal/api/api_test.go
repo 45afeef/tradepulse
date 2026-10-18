@@ -36,7 +36,9 @@ func newServer(t *testing.T, mutate func(*config.Config)) (*Server, http.Handler
 	t.Helper()
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	cfg := config.Config{Env: "development", DocsEnabled: true, RateRPS: 1000, RateBurst: 1000,
-		SourceMinInterval: 60 * time.Second, SourceMaxInterval: 24 * time.Hour, AllowedOrigins: []string{"http://allowed.example"}}
+		SourceMinInterval: 60 * time.Second, SourceMaxInterval: 24 * time.Hour,
+		WebhookSigningKey: strings.Repeat("w", 40), WebhookRatePerMinute: 600,
+		XBearerToken: "test-x-token", XMonthlyBudgetUSD: 1, XCostPerResourceUSD: 0.005, XMaxPostsPerFetch: 20, AllowedOrigins: []string{"http://allowed.example"}}
 	if mutate != nil {
 		mutate(&cfg)
 	}
@@ -44,13 +46,19 @@ func newServer(t *testing.T, mutate func(*config.Config)) (*Server, http.Handler
 	if err != nil {
 		t.Fatal(err)
 	}
-	fake := &fakeNet{pages: map[string]*safefetch.Response{}}
+	fake := &fakeNet{pages: map[string]*safefetch.Response{}, prefixes: map[string]*safefetch.Response{}}
 	lastNet = fake
+	usage := memory.NewUsageRepo()
+	conns := []connector.Connector{connector.NewRSS(fake), connector.NewWebMonitor(fake, connector.NewRobots(fake, time.Hour, nil))}
+	if cfg.XBearerToken != "" {
+		conns = append(conns, connector.NewX(fake, connector.XSettings{Token: cfg.XBearerToken, BaseURL: "https://api.x.test",
+			BudgetUSD: cfg.XMonthlyBudgetUSD, CostPerResourceUSD: cfg.XCostPerResourceUSD, MaxPosts: 20}, usage))
+	}
 	s, err := New(Deps{
 		Cfg: cfg, Log: log, Users: memory.NewUserRepo(), Feeds: memory.NewFeedRepo(10), JWT: jwt,
 		Invites: memory.NewInviteRepo(), Audit: memory.NewAuditRepo(100),
 		Sources: memory.NewSourceRepo(), Runs: memory.NewRunRepo(), Bus: eventbus.NewMemory(64, log),
-		Connectors: connector.NewRegistry(connector.NewRSS(fake), connector.NewWebMonitor(fake, connector.NewRobots(fake, time.Hour, nil))),
+		Connectors: connector.NewRegistry(conns...), Items: memory.NewItemStore(), Usage: usage,
 		Tickets: auth.NewTicketStore(time.Minute), Personalizer: nopPersonalizer{},
 		Hub: delivery.NewHub(log, nil, 2), Registry: event.NewRegistry(),
 	})

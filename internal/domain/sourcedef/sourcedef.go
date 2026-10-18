@@ -25,6 +25,8 @@ const (
 	TypeRSS        Type = "rss"
 	TypeWebMonitor Type = "webmonitor"
 	TypeManual     Type = "manual"
+	TypeWebhook    Type = "webhook" // push: external systems POST items
+	TypeX          Type = "x"       // official X API, budget-capped
 )
 
 // WebConfig tells the page monitor how to extract items from an HTML page.
@@ -36,6 +38,17 @@ type WebConfig struct {
 	MaxItems           int    `json:"max_items,omitempty" minimum:"1" maximum:"100" doc:"Default 30."`
 	IgnoreRobots       bool   `json:"ignore_robots,omitempty" doc:"Only with a recorded reason; robots.txt is respected by default."`
 	IgnoreRobotsReason string `json:"ignore_robots_reason,omitempty" maxLength:"200"`
+}
+
+// WebhookConfig configures an inbound webhook source.
+type WebhookConfig struct {
+	Auth string `json:"auth" enum:"hmac,token" doc:"hmac (default, recommended): signed requests with replay protection. token: static secret in a header, for tools that cannot sign."`
+}
+
+// XConfig configures an X (Twitter) account source.
+type XConfig struct {
+	Handle string `json:"handle" maxLength:"16" doc:"Account handle without @" example:"narendramodi"`
+	UserID string `json:"user_id,omitempty" doc:"Resolved automatically when the source is saved"`
 }
 
 // State is runtime information maintained by the scheduler.
@@ -50,6 +63,7 @@ type State struct {
 	ETag                string
 	LastModified        string
 	ItemsTotal          int64
+	Cursor              string // connector cursor, e.g. the X since_id
 }
 
 type Source struct {
@@ -61,6 +75,9 @@ type Source struct {
 	IntervalSeconds int
 	Entities        []string // attached to every event from this source (subscribable topics)
 	Web             *WebConfig
+	Webhook         *WebhookConfig
+	X               *XConfig
+	SecretVersion   int // webhook secret generation; bumping it rotates the secret
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 	State           State
@@ -69,7 +86,11 @@ type Source struct {
 // Bounds limit per-source polling intervals (SOURCE_MIN/MAX_INTERVAL_SECONDS).
 type Bounds struct{ Min, Max time.Duration }
 
-var nameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{1,39}$`)
+var (
+	nameRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{1,39}$`)
+	handleRe = regexp.MustCompile(`^[A-Za-z0-9_]{1,15}$`)
+	userIDRe = regexp.MustCompile(`^[0-9]{0,25}$`)
+)
 
 func hasControl(s string) bool {
 	for _, r := range s {
@@ -100,8 +121,41 @@ func (s Source) Normalize(b Bounds) (Source, error) {
 		}
 	case TypeManual:
 		s.URL, s.IntervalSeconds = "", 0
+	case TypeWebhook:
+		s.URL, s.IntervalSeconds = "", 0
+		auth := "hmac"
+		if s.Webhook != nil && strings.TrimSpace(s.Webhook.Auth) != "" {
+			auth = strings.ToLower(strings.TrimSpace(s.Webhook.Auth))
+		}
+		if auth != "hmac" && auth != "token" {
+			return s, errors.New("webhook.auth must be hmac or token")
+		}
+		s.Webhook = &WebhookConfig{Auth: auth}
+	case TypeX:
+		s.URL = ""
+		secs := time.Duration(s.IntervalSeconds) * time.Second
+		if secs < b.Min || secs > b.Max {
+			return s, fmt.Errorf("interval_seconds must be between %d and %d", int(b.Min.Seconds()), int(b.Max.Seconds()))
+		}
+		if s.X == nil {
+			return s, errors.New("x.handle is required for x sources")
+		}
+		h := strings.TrimPrefix(strings.TrimSpace(s.X.Handle), "@")
+		if !handleRe.MatchString(h) {
+			return s, errors.New("x.handle must be 1-15 letters, digits or underscores")
+		}
+		if !userIDRe.MatchString(s.X.UserID) {
+			return s, errors.New("x.user_id is invalid")
+		}
+		s.X = &XConfig{Handle: h, UserID: s.X.UserID}
 	default:
-		return s, errors.New("type must be rss, webmonitor or manual")
+		return s, errors.New("type must be rss, webmonitor, manual, webhook or x")
+	}
+	if s.Type != TypeWebhook {
+		s.Webhook = nil
+	}
+	if s.Type != TypeX {
+		s.X = nil
 	}
 
 	if len(s.Entities) > 10 {
@@ -157,7 +211,7 @@ func (s Source) Health(now time.Time) string {
 	switch {
 	case !s.Enabled:
 		return "disabled"
-	case s.Type == TypeManual:
+	case s.Type == TypeManual || s.Type == TypeWebhook: // push sources have no schedule
 		return "ok"
 	case s.State.LastRunAt == nil:
 		return "pending"
@@ -195,6 +249,8 @@ type Repository interface {
 	Delete(ctx context.Context, id string) error
 	// SaveState replaces only the runtime state, so it never races with admin edits.
 	SaveState(ctx context.Context, id string, st State) error
+	// BumpSecretVersion atomically rotates the webhook secret generation and returns the new version.
+	BumpSecretVersion(ctx context.Context, id string) (int, error)
 }
 
 type RunRepository interface {
@@ -207,4 +263,11 @@ type RunRepository interface {
 type ItemStore interface {
 	Insert(ctx context.Context, sourceID, key string, raw []byte, now time.Time) (bool, error)
 	Prune(ctx context.Context, olderThan time.Time) (int64, error)
+}
+
+// UsageStore tracks paid-API spend per month in micro-USD (1 USD = 1,000,000).
+type UsageStore interface {
+	// Add records spend and returns the month's total including it.
+	Add(ctx context.Context, key string, microUSD int64, now time.Time) (int64, error)
+	Month(ctx context.Context, key string, now time.Time) (int64, error)
 }

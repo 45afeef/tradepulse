@@ -8,7 +8,7 @@ import (
 
 func baseEnv(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{"APP_ENV", "DOCS_ENABLED", "SIM_DEMO", "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "DATABASE_URL", "DATABASE_MIGRATION_URL", "DB_MAX_CONNS", "DB_SIMPLE_PROTOCOL", "SOURCE_MIN_INTERVAL_SECONDS", "SOURCE_MAX_INTERVAL_SECONDS", "X_BEARER_TOKEN", "X_API_BASE_URL", "X_MONTHLY_BUDGET_USD", "TRUST_PROXY", "JWT_TTL", "SIM_INTERVAL", "LOG_LEVEL"} {
+	for _, k := range []string{"APP_ENV", "DOCS_ENABLED", "SIM_DEMO", "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "DATABASE_URL", "DATABASE_MIGRATION_URL", "DB_MAX_CONNS", "DB_SIMPLE_PROTOCOL", "SOURCE_MIN_INTERVAL_SECONDS", "SOURCE_MAX_INTERVAL_SECONDS", "X_BEARER_TOKEN", "X_API_BASE_URL", "X_MONTHLY_BUDGET_USD", "WEBHOOK_SIGNING_KEY", "WEBHOOK_RATE_PER_MINUTE", "X_COST_PER_RESOURCE_USD", "X_MAX_POSTS_PER_FETCH", "FETCH_USER_AGENT", "TRUST_PROXY", "JWT_TTL", "SIM_INTERVAL", "LOG_LEVEL"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("JWT_SECRET", strings.Repeat("s", 40))
@@ -147,5 +147,42 @@ func TestConfigLogValueRedactsSecrets(t *testing.T) {
 		if strings.Contains(out, secret) {
 			t.Fatalf("log value leaks a secret: %s", out)
 		}
+	}
+}
+
+func TestWebhookAndXSettings(t *testing.T) {
+	baseEnv(t)
+	for _, k := range []string{"WEBHOOK_SIGNING_KEY", "WEBHOOK_RATE_PER_MINUTE", "X_COST_PER_RESOURCE_USD", "X_MAX_POSTS_PER_FETCH", "FETCH_USER_AGENT"} {
+		t.Setenv(k, "")
+	}
+	c, err := Load()
+	if err != nil || c.WebhookSigningKey != "" || c.WebhookRatePerMinute != 60 || c.XCostPerResourceUSD != 0.005 || c.XMaxPostsPerFetch != 20 {
+		t.Fatalf("defaults: %+v %v", c, err)
+	}
+	t.Setenv("WEBHOOK_SIGNING_KEY", strings.Repeat("w", 40))
+	t.Setenv("X_COST_PER_RESOURCE_USD", "0.01")
+	t.Setenv("X_MAX_POSTS_PER_FETCH", "50")
+	if c, err = Load(); err != nil || c.WebhookSigningKey == "" || c.XCostPerResourceUSD != 0.01 || c.XMaxPostsPerFetch != 50 {
+		t.Fatalf("overrides: %+v %v", c, err)
+	}
+	for _, bad := range []struct{ k, v string }{
+		{"WEBHOOK_SIGNING_KEY", "too-short"}, {"WEBHOOK_RATE_PER_MINUTE", "0"}, {"WEBHOOK_RATE_PER_MINUTE", "99999"},
+		{"X_COST_PER_RESOURCE_USD", "0"}, {"X_COST_PER_RESOURCE_USD", "free"}, {"X_MAX_POSTS_PER_FETCH", "4"}, {"X_MAX_POSTS_PER_FETCH", "500"},
+		{"FETCH_USER_AGENT", strings.Repeat("a", 201)},
+	} {
+		baseEnv(t)
+		t.Setenv(bad.k, bad.v)
+		if _, err := Load(); err == nil {
+			t.Errorf("%s=%q accepted", bad.k, bad.v)
+		}
+	}
+}
+
+func TestLogValueRedactsWebhookKey(t *testing.T) {
+	baseEnv(t)
+	t.Setenv("WEBHOOK_SIGNING_KEY", "webhook-key-"+strings.Repeat("k", 30))
+	c, _ := Load()
+	if out := fmt.Sprintf("%v", c.LogValue()); strings.Contains(out, "webhook-key-") {
+		t.Fatalf("webhook signing key leaked: %s", out)
 	}
 }

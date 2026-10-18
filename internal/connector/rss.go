@@ -131,11 +131,11 @@ func build(key, title, summary, link string, published time.Time) (Item, bool) {
 		if link != "" {
 			key = link
 		} else {
-			key = hashKey(title, published.String())
+			key = HashKey(title, published.String())
 		}
 	}
 	if len(key) > 200 {
-		key = hashKey(key)
+		key = HashKey(key)
 	}
 	raw, _ := json.Marshal(map[string]any{"title": title, "summary": summary, "url": link, "published": published})
 	return Item{Key: "rss:" + key, Title: title, Summary: summary, URL: link, PublishedAt: published, Raw: raw}, true

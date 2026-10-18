@@ -44,6 +44,9 @@ Source → Listener → RawMessage → Processor → Event → event.Bus → (Si
 - New migration = new numbered `NNNN_name.up.sql` + `.down.sql` (never edit applied migrations). Every `CREATE TABLE` must be followed by `ENABLE ROW LEVEL SECURITY` (providers like Supabase expose `public` over HTTP). Tests enforce this.
 - Anything that fetches a URL goes through `internal/safefetch` (architecture test enforces it). Source polling intervals are per-source config (D-022), never hardcoded.
 
+## Paid APIs and secrets
+Any connector that costs money checks a persistent budget BEFORE each call and records spend (see `connector/x.go`). Tokens/secrets come from env, are never logged, never put in errors, and never returned by the API (webhook secrets are shown once). Authentication failures that could reveal existence (webhooks) return one identical response.
+
 ## API docs rule
 Every endpoint ships with documentation in the Huma registration (summary, description, tag, error codes) and field `doc`/`example` tags; `/docs` is the developer manual. `TestEveryOperationIsDocumented` fails otherwise. Update the overview in `internal/api/docs.go` when behavior visible to API users changes.
 

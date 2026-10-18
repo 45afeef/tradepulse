@@ -37,6 +37,11 @@ type Config struct {
 	XBearerToken      string // secret
 	XAPIBaseURL       string
 	XMonthlyBudgetUSD float64
+	XCostPerResourceUSD float64 // price per post/user read, from your X plan
+	XMaxPostsPerFetch   int
+
+	WebhookSigningKey     string // secret; enables inbound webhooks when set
+	WebhookRatePerMinute  int
 
 	// Optional first-admin bootstrap (idempotent; remove from env after first start).
 	BootstrapAdminEmail    string
@@ -128,6 +133,19 @@ func Load() (Config, error) {
 	if c.XMonthlyBudgetUSD, err = strconv.ParseFloat(get("X_MONTHLY_BUDGET_USD", "20"), 64); err != nil || c.XMonthlyBudgetUSD < 0 {
 		return c, errors.New("X_MONTHLY_BUDGET_USD must be a number >= 0")
 	}
+	if c.XCostPerResourceUSD, err = strconv.ParseFloat(get("X_COST_PER_RESOURCE_USD", "0.005"), 64); err != nil || c.XCostPerResourceUSD <= 0 || c.XCostPerResourceUSD > 10 {
+		return c, errors.New("X_COST_PER_RESOURCE_USD must be a number > 0")
+	}
+	if c.XMaxPostsPerFetch, err = strconv.Atoi(get("X_MAX_POSTS_PER_FETCH", "20")); err != nil || c.XMaxPostsPerFetch < 5 || c.XMaxPostsPerFetch > 100 {
+		return c, errors.New("X_MAX_POSTS_PER_FETCH must be an integer 5-100")
+	}
+	c.WebhookSigningKey = os.Getenv("WEBHOOK_SIGNING_KEY")
+	if c.WebhookSigningKey != "" && len(c.WebhookSigningKey) < 32 {
+		return c, errors.New("WEBHOOK_SIGNING_KEY must be at least 32 characters")
+	}
+	if c.WebhookRatePerMinute, err = strconv.Atoi(get("WEBHOOK_RATE_PER_MINUTE", "60")); err != nil || c.WebhookRatePerMinute < 1 || c.WebhookRatePerMinute > 6000 {
+		return c, errors.New("WEBHOOK_RATE_PER_MINUTE must be an integer 1-6000")
+	}
 	return c, nil
 }
 
@@ -136,7 +154,7 @@ func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("env", c.Env), slog.String("addr", c.Addr), slog.Bool("docs", c.DocsEnabled),
 		slog.String("demo", c.SimDemo), slog.Bool("database", c.DatabaseURL != ""),
-		slog.Bool("x_configured", c.XBearerToken != ""), slog.Float64("x_budget_usd", c.XMonthlyBudgetUSD),
+		slog.Bool("x_configured", c.XBearerToken != ""), slog.Bool("webhooks", c.WebhookSigningKey != ""), slog.Float64("x_budget_usd", c.XMonthlyBudgetUSD),
 	)
 }
 
