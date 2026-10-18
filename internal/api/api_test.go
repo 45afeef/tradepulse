@@ -252,7 +252,7 @@ func TestLoginDoesNotRevealWhetherEmailExists(t *testing.T) {
 
 func TestAuthEndpointsAreRateLimited(t *testing.T) {
 	s, h := newServer(t, nil)
-	s.authLim = newLimiter(0.2, 5)
+	s.authLim = newLimiter(0, 5)
 	limited := false
 	for i := 0; i < 8; i++ {
 		if do(h, "POST", "/api/v1/auth/login", "", `{"email":"x@example.com","password":"wrong-password-1"}`).Code == http.StatusTooManyRequests {

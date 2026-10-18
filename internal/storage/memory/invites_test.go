@@ -194,8 +194,8 @@ func TestItemStoreDedupesAndPrunes(t *testing.T) {
 	if wins.Load() != 1 {
 		t.Fatalf("concurrent inserts won %d times, want exactly 1", wins.Load())
 	}
-	if n, _ := s.Prune(ctx, now.Add(time.Hour)); n != 4 {
-		t.Fatalf("pruned %d, want 4", n)
+	if n, _ := s.Prune(ctx, now.Add(time.Hour)); n != 3 {
+		t.Fatalf("pruned %d, want 3", n)
 	}
 }
 

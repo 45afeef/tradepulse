@@ -75,8 +75,8 @@ func (r *Registry) Get(t sourcedef.Type) (Connector, bool) {
 
 // Validate runs the connector's own config validation (no-op for types without one).
 func (r *Registry) Validate(src sourcedef.Source) error {
-	if src.Type == sourcedef.TypeManual {
-		return nil
+	if src.Type == sourcedef.TypeManual || src.Type == sourcedef.TypeWebhook {
+		return nil // push sources have no connector to validate
 	}
 	c, ok := r.byType[src.Type]
 	if !ok {

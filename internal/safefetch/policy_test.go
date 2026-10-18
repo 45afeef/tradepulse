@@ -13,7 +13,7 @@ import (
 // The only exception is the Docker healthcheck calling localhost in cmd/server/main.go.
 func TestNoOutboundHTTPOutsideSafefetch(t *testing.T) {
 	root := filepath.Join("..", "..")
-	pat := regexp.MustCompile(`http\.(Get|Post|PostForm|Head|DefaultClient|NewRequest|NewRequestWithContext)\b|http\.Client\{|&http\.Client\b`)
+	pat := regexp.MustCompile(`(?m)(?:^|[^A-Za-z0-9_.])(?:http\.(?:Get|Post|PostForm|Head|DefaultClient|NewRequest|NewRequestWithContext)\b|&?http\.Client\b)`)
 	allow := map[string]bool{
 		filepath.ToSlash(filepath.Join("cmd", "server", "main.go")): true,
 	}

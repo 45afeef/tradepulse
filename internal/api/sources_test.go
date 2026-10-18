@@ -84,20 +84,20 @@ func TestCreateSourceRejectsDangerousAndInvalidInput(t *testing.T) {
 	_, h := newServer(t, nil)
 	_, admin := adminToken(t)
 	bad := map[string]string{
-		"metadata ip":     `{"name":"a1","type":"rss","url":"http://169.254.169.254/latest/","interval_seconds":300}`,
-		"localhost":       `{"name":"a2","type":"rss","url":"http://localhost/feed","interval_seconds":300}`,
-		"private ip":      `{"name":"a3","type":"rss","url":"http://10.0.0.5/feed","interval_seconds":300}`,
-		"file scheme":     `{"name":"a4","type":"rss","url":"file:///etc/passwd","interval_seconds":300}`,
-		"odd port":        `{"name":"a5","type":"rss","url":"http://example.com:8080/f","interval_seconds":300}`,
-		"credentials":     `{"name":"a6","type":"rss","url":"https://u:p@example.com/f","interval_seconds":300}`,
-		"interval low":    `{"name":"a7","type":"rss","url":"https://example.com/f","interval_seconds":5}`,
-		"interval high":   `{"name":"a8","type":"rss","url":"https://example.com/f","interval_seconds":604800}`,
-		"bad name":        `{"name":"Bad Name","type":"rss","url":"https://example.com/f","interval_seconds":300}`,
-		"unknown type":    `{"name":"a9","type":"ftp","url":"https://example.com/f","interval_seconds":300}`,
-		"web no config":   `{"name":"b1","type":"webmonitor","url":"https://example.com/p","interval_seconds":300}`,
-		"bad selector":    `{"name":"b2","type":"webmonitor","url":"https://example.com/p","interval_seconds":300,"web":{"item_selector":"div["}}`,
+		"metadata ip":      `{"name":"a1","type":"rss","url":"http://169.254.169.254/latest/","interval_seconds":300}`,
+		"localhost":        `{"name":"a2","type":"rss","url":"http://localhost/feed","interval_seconds":300}`,
+		"private ip":       `{"name":"a3","type":"rss","url":"http://10.0.0.5/feed","interval_seconds":300}`,
+		"file scheme":      `{"name":"a4","type":"rss","url":"file:///etc/passwd","interval_seconds":300}`,
+		"odd port":         `{"name":"a5","type":"rss","url":"http://example.com:8080/f","interval_seconds":300}`,
+		"credentials":      `{"name":"a6","type":"rss","url":"https://u:p@example.com/f","interval_seconds":300}`,
+		"interval low":     `{"name":"a7","type":"rss","url":"https://example.com/f","interval_seconds":5}`,
+		"interval high":    `{"name":"a8","type":"rss","url":"https://example.com/f","interval_seconds":604800}`,
+		"bad name":         `{"name":"Bad Name","type":"rss","url":"https://example.com/f","interval_seconds":300}`,
+		"unknown type":     `{"name":"a9","type":"ftp","url":"https://example.com/f","interval_seconds":300}`,
+		"web no config":    `{"name":"b1","type":"webmonitor","url":"https://example.com/p","interval_seconds":300}`,
+		"bad selector":     `{"name":"b2","type":"webmonitor","url":"https://example.com/p","interval_seconds":300,"web":{"item_selector":"div["}}`,
 		"robots no reason": `{"name":"b3","type":"webmonitor","url":"https://example.com/p","interval_seconds":300,"web":{"item_selector":"a","ignore_robots":true}}`,
-		"unknown field":   `{"name":"b4","type":"rss","url":"https://example.com/f","interval_seconds":300,"bogus":1}`,
+		"unknown field":    `{"name":"b4","type":"rss","url":"https://example.com/f","interval_seconds":300,"bogus":1}`,
 	}
 	for name, body := range bad {
 		if rec := do(h, "POST", "/api/v1/admin/sources", admin, body); rec.Code < 400 || rec.Code >= 500 {
@@ -202,7 +202,7 @@ func TestManualPostPublishesAndIsAudited(t *testing.T) {
 	if rec := do(h, "POST", "/api/v1/admin/items", admin, post); rec.Code != http.StatusConflict {
 		t.Fatalf("disabled manual source: %d, want 409", rec.Code)
 	}
-	do(h, "PUT", "/api/v1/admin/sources/"+id, admin, `{"enabled":true}`)
+	do(h, "PUT", "/api/v1/admin/sources/"+id, admin, `{"enabled":true,"entities":["announcements"]}`)
 	rec := do(h, "POST", "/api/v1/admin/items", admin, post)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("post: %d %s", rec.Code, rec.Body)
