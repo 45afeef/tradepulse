@@ -23,7 +23,11 @@ func mkHook(t *testing.T, h http.Handler, admin, name, auth string) (id, secret 
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create webhook: %d %s", rec.Code, rec.Body)
 	}
-	var v struct{ ID, WebhookSecret, WebhookPath string }
+	var v struct {
+		ID            string `json:"id"`
+		WebhookSecret string `json:"webhook_secret"`
+		WebhookPath   string `json:"webhook_path"`
+	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &v)
 	if !strings.HasPrefix(v.WebhookSecret, webhook.SecretPrefix) || v.WebhookPath != "/api/v1/hooks/"+name {
 		t.Fatalf("secret/path missing in create response: %s", rec.Body)
@@ -111,16 +115,16 @@ func TestWebhookRejectsBadCredentialsIdentically(t *testing.T) {
 	body := `{"title":"x"}`
 	good := signed(secret, body, time.Now())
 	cases := map[string]*httptest.ResponseRecorder{
-		"wrong signature":     postHook(h, "strict-hook", body, map[string]string{"X-TP-Timestamp": good["X-TP-Timestamp"], "X-TP-Signature": "sha256=" + strings.Repeat("0", 64)}),
-		"stale timestamp":     postHook(h, "strict-hook", body, signed(secret, body, time.Now().Add(-10*time.Minute))),
-		"future timestamp":    postHook(h, "strict-hook", body, signed(secret, body, time.Now().Add(10*time.Minute))),
-		"no headers":          postHook(h, "strict-hook", body, nil),
-		"signed other body":   postHook(h, "strict-hook", `{"title":"y"}`, good),
-		"token to hmac":       postHook(h, "strict-hook", body, map[string]string{"X-Webhook-Token": secret}),
-		"bearer to hmac":      postHook(h, "strict-hook", body, map[string]string{"Authorization": "Bearer " + secret}),
-		"unknown source":      postHook(h, "no-such-hook", body, good),
-		"disabled source":     postHook(h, "off-hook", body, good),
-		"wrong secret":        postHook(h, "strict-hook", body, signed("whsec_wrong", body, time.Now())),
+		"wrong signature":   postHook(h, "strict-hook", body, map[string]string{"X-TP-Timestamp": good["X-TP-Timestamp"], "X-TP-Signature": "sha256=" + strings.Repeat("0", 64)}),
+		"stale timestamp":   postHook(h, "strict-hook", body, signed(secret, body, time.Now().Add(-10*time.Minute))),
+		"future timestamp":  postHook(h, "strict-hook", body, signed(secret, body, time.Now().Add(10*time.Minute))),
+		"no headers":        postHook(h, "strict-hook", body, nil),
+		"signed other body": postHook(h, "strict-hook", `{"title":"y"}`, good),
+		"token to hmac":     postHook(h, "strict-hook", body, map[string]string{"X-Webhook-Token": secret}),
+		"bearer to hmac":    postHook(h, "strict-hook", body, map[string]string{"Authorization": "Bearer " + secret}),
+		"unknown source":    postHook(h, "no-such-hook", body, good),
+		"disabled source":   postHook(h, "off-hook", body, good),
+		"wrong secret":      postHook(h, "strict-hook", body, signed("whsec_wrong", body, time.Now())),
 	}
 	var first string
 	for name, rec := range cases {
@@ -216,7 +220,9 @@ func TestWebhookSecretNeverExposedAndRotationInvalidatesOld(t *testing.T) {
 		}
 	}
 	rec := do(h, "POST", "/api/v1/admin/sources/"+id+"/webhook-secret", admin, "")
-	var v struct{ WebhookSecret string }
+	var v struct {
+		WebhookSecret string `json:"webhook_secret"`
+	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &v)
 	if rec.Code != http.StatusOK || v.WebhookSecret == "" || v.WebhookSecret == old {
 		t.Fatalf("rotate: %d %s", rec.Code, rec.Body)
