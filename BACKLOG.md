@@ -117,7 +117,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
   - [ ] fixture tests with a fake clock (no sleeping tests)
 
 ### TP-019 — Channel abstraction + outbound webhook (Q-05, D-025)
-- Status: Proposed · P0 · M5 · Depends: TP-010, TP-005
+- Status: Review (implemented in 0.7.0-dev; not yet confirmed by running)
 - Acceptance:
   - [ ] `Channel` interface (`Send(ctx, userID, item)`), in-app and webhook implementations, registry by name
   - [ ] webhook: HTTPS only via safefetch, HMAC-signed payload, retry with back-off, delivery history, auto-disable after repeated failures
@@ -138,3 +138,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 ### TP-022 — Inbound webhook source (HMAC or token, replay-safe, rotatable)
 - Status: Review (implemented in 0.6.0-dev; not yet confirmed by running)
 - Acceptance: [x] derived secrets, rotation, uniform 401; [x] idempotent retries; [x] limits (64 KB, per-source rate); [x] docs in /docs and `docs/WEBHOOKS.md`; [ ] owner sends a real delivery from their automation
+
+### TP-023 — Alert rules, templates, preview, guardrails, fires history
+- Status: Review (implemented in 0.7.0-dev; not yet confirmed by running) · P0 · M5
+- Acceptance: [x] structured rules (scope/types/conditions/cooldown/severity/channels); [x] shipped + example-domain templates and from-template creation; [x] preview; [x] cooldown, per-user limits, hourly cap with auto-pause and visible reason; [x] explainable fires and history; [x] suspension stops/resumes rules; [ ] owner tries a rule end to end (manual item or webhook) and a signed outbound delivery

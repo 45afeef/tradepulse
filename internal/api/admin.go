@@ -176,8 +176,14 @@ func (s *Server) setUserStatus(ctx context.Context, id, status, action string) (
 	if status == user.StatusSuspended {
 		s.Personalizer.RemoveUser(id) // stop matching immediately
 		s.Hub.DisconnectUser(id)      // cut live connections
+		if s.Alerts != nil {
+			s.Alerts.RemoveUser(id) // stop firing alerts for suspended members
+		}
 	} else {
 		s.Personalizer.UpsertUser(id, u.Profile)
+		if s.Alerts != nil {
+			_ = s.Alerts.LoadUser(ctx, id)
+		}
 	}
 	s.record(ctx, actor, action, "user", id, "")
 	u.Status = status

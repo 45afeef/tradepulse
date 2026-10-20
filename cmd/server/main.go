@@ -16,11 +16,13 @@ import (
 	"tradepulse/examples/market"
 	"tradepulse/examples/status"
 	"tradepulse/internal/access"
+	"tradepulse/internal/alerting"
 	"tradepulse/internal/api"
 	"tradepulse/internal/auth"
 	"tradepulse/internal/config"
 	"tradepulse/internal/connector"
 	"tradepulse/internal/delivery"
+	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/audit"
 	"tradepulse/internal/domain/feed"
 	"tradepulse/internal/domain/invite"
@@ -71,6 +73,10 @@ func run() error {
 		runs    sourcedef.RunRepository
 		items   sourcedef.ItemStore
 		usage   sourcedef.UsageStore
+		aRules  alert.RuleRepository
+		aFires  alert.FireRepository
+		chans   alert.ChannelRepository
+		dels    alert.DeliveryRepository
 		ready   func(context.Context) error
 	)
 	if cfg.DatabaseURL != "" {
@@ -92,6 +98,8 @@ func run() error {
 		invites, audits = postgres.NewInviteRepo(pool), postgres.NewAuditRepo(pool)
 		sources, runs, items = postgres.NewSourceRepo(pool), postgres.NewRunRepo(pool), postgres.NewItemStore(pool)
 		usage = postgres.NewUsageRepo(pool)
+		aRules, aFires = postgres.NewAlertRuleRepo(pool), postgres.NewAlertFireRepo(pool)
+		chans, dels = postgres.NewChannelRepo(pool), postgres.NewDeliveryRepo(pool)
 		ready = pool.Ping
 		go postgres.RunRetention(ctx, pool, log, 1000, 365*24*time.Hour)
 		log.Info("storage: postgres")
@@ -100,6 +108,8 @@ func run() error {
 		invites, audits = memory.NewInviteRepo(), memory.NewAuditRepo(10000)
 		sources, runs, items = memory.NewSourceRepo(), memory.NewRunRepo(), memory.NewItemStore()
 		usage = memory.NewUsageRepo()
+		aRules, aFires = memory.NewAlertRuleRepo(), memory.NewAlertFireRepo()
+		chans, dels = memory.NewChannelRepo(), memory.NewDeliveryRepo()
 		log.Warn("storage: in-memory (development only; data is lost on restart)")
 	}
 	hub := delivery.NewHub(log, cfg.AllowedOrigins, cfg.MaxWSPerUser)
@@ -121,11 +131,15 @@ func run() error {
 	bus.Subscribe("personalization", engine.Handle)
 
 	// Sources: an example domain chosen by SIM_DEMO (none in production).
+	templates := alert.NewTemplates()
 	var listeners []source.Listener
 	procs := map[string]processing.Processor{}
 	switch cfg.SimDemo {
 	case "market":
 		if err := market.RegisterTypes(reg); err != nil {
+			return err
+		}
+		if err := market.RegisterAlertTemplates(templates); err != nil {
 			return err
 		}
 		listeners = append(listeners, market.NewSimulator(cfg.SimSymbols, cfg.SimInterval))
@@ -134,6 +148,9 @@ func run() error {
 		bus.Subscribe("signals", detector.Handle)
 	case "status":
 		if err := status.RegisterTypes(reg); err != nil {
+			return err
+		}
+		if err := status.RegisterAlertTemplates(templates); err != nil {
 			return err
 		}
 		listeners = append(listeners, status.NewSimulator(cfg.SimInterval))
@@ -155,6 +172,22 @@ func run() error {
 	}
 	conns := connector.NewRegistry(connectors...)
 
+	// Alerts: rules evaluated on every event; deliveries to in-app and signed outbound webhooks.
+	sender := alerting.NewSender(log, chans, dels, fetcher, hub, []byte(cfg.WebhookSigningKey), alerting.SenderConfig{})
+	alertEngine := alerting.NewEngine(log, aRules, aFires, reg, hub, sender, alerting.Config{MaxFiresPerHour: cfg.AlertMaxFiresPerHour})
+	allUsers, err := users.List(ctx)
+	if err != nil {
+		return err
+	}
+	active := map[string]bool{}
+	for _, u := range allUsers {
+		active[u.ID] = u.Status == user.StatusActive
+	}
+	if err := alertEngine.Load(ctx, func(id string) bool { return active[id] }); err != nil {
+		return err
+	}
+	bus.Subscribe("alerts", alertEngine.Handle)
+
 	jwt, err := auth.NewJWT(cfg.JWTSecret, "tradepulse", cfg.JWTTTL)
 	if err != nil {
 		return err
@@ -165,6 +198,7 @@ func run() error {
 	apiSrv, err := api.New(api.Deps{
 		Cfg: cfg, Log: log, Users: users, Feeds: feeds, Invites: invites, Audit: audits, JWT: jwt,
 		Tickets: tickets, Personalizer: engine, Hub: hub, Registry: reg, Ready: ready, Sources: sources, Runs: runs, Bus: bus, Connectors: conns, Items: items, Usage: usage,
+		Alerts: alertEngine, AlertRules: aRules, AlertFires: aFires, Channels: chans, Deliveries: dels, Templates: templates, Outbound: sender,
 	})
 	if err != nil {
 		return err
@@ -172,6 +206,12 @@ func run() error {
 	go apiSrv.Run(ctx)
 
 	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sender.Run(ctx)
+	}()
+	go alerting.RunRetention(ctx, aFires, dels, 30*24*time.Hour, log)
 	sched := ingestion.NewScheduler(log, sources, runs, items, conns, bus, reg, ingestion.SchedulerConfig{
 		Bounds: sourcedef.Bounds{Min: cfg.SourceMinInterval, Max: cfg.SourceMaxInterval},
 	})

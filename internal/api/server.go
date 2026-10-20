@@ -12,9 +12,10 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
 	"tradepulse/internal/auth"
-	"tradepulse/internal/connector"
 	"tradepulse/internal/config"
+	"tradepulse/internal/connector"
 	"tradepulse/internal/delivery"
+	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/audit"
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/feed"
@@ -47,6 +48,13 @@ type Deps struct {
 	Bus          event.Bus
 	Connectors   *connector.Registry
 	Items        sourcedef.ItemStore
+	Alerts       AlertEngine
+	AlertRules   alert.RuleRepository
+	AlertFires   alert.FireRepository
+	Channels     alert.ChannelRepository
+	Deliveries   alert.DeliveryRepository
+	Templates    *alert.Templates
+	Outbound     Outbound
 	Usage        sourcedef.UsageStore
 	// Ready (optional) checks dependencies for /readyz, e.g. the database ping.
 	Ready func(ctx context.Context) error
@@ -99,6 +107,7 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 		{Name: "ops", Description: tagOps}, {Name: "auth", Description: tagAuth},
 		{Name: "me", Description: tagMe}, {Name: "catalog", Description: tagCatalog},
 		{Name: "realtime", Description: tagRealtime}, {Name: "admin", Description: tagAdmin},
+		{Name: "alerts", Description: tagAlerts}, {Name: "channels", Description: tagChannels},
 	}
 
 	secured := []map[string][]string{{"bearer": {}}}
@@ -190,14 +199,14 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 	huma.Register(api, huma.Operation{OperationID: "update-source", Method: http.MethodPut, Path: "/api/v1/admin/sources/{id}", Tags: []string{"admin"},
 		Summary: "Update a source's settings", Security: secured, Middlewares: admin, MaxBodyBytes: small,
 		Description: "Replaces url, enabled, interval_seconds, entities and web settings. Name and type cannot change. Same validation as creation.",
-		Errors: []int{401, 403, 404, 422}}, s.updateSource)
+		Errors:      []int{401, 403, 404, 422}}, s.updateSource)
 	huma.Register(api, huma.Operation{OperationID: "delete-source", Method: http.MethodDelete, Path: "/api/v1/admin/sources/{id}", Tags: []string{"admin"},
 		Summary: "Delete a source", Security: secured, Middlewares: admin, DefaultStatus: http.StatusNoContent,
 		Description: "Removes the source, its run history and stored items. Members' subscriptions to it simply stop matching.", Errors: []int{401, 403, 404}}, s.deleteSource)
 	huma.Register(api, huma.Operation{OperationID: "run-source-now", Method: http.MethodPost, Path: "/api/v1/admin/sources/{id}/run", Tags: []string{"admin"},
 		Summary: "Fetch a source as soon as possible", Security: secured, Middlewares: admin,
 		Description: "Schedules the next fetch immediately (the scheduler picks it up within seconds). Only for enabled rss/webmonitor sources.",
-		Errors: []int{401, 403, 404, 409}}, s.runSourceNow)
+		Errors:      []int{401, 403, 404, 409}}, s.runSourceNow)
 	huma.Register(api, huma.Operation{OperationID: "test-source", Method: http.MethodPost, Path: "/api/v1/admin/sources/test", Tags: []string{"admin"},
 		Summary: "Test a source draft without saving", Security: secured, Middlewares: admin, MaxBodyBytes: small,
 		Description: "Fetches the URL with the given settings and returns the first items it would extract (nothing is stored or published). " +
@@ -206,23 +215,74 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 	huma.Register(api, huma.Operation{OperationID: "post-item", Method: http.MethodPost, Path: "/api/v1/admin/items", Tags: []string{"admin"},
 		Summary: "Publish a manual item", Security: secured, Middlewares: admin, DefaultStatus: http.StatusCreated, MaxBodyBytes: small,
 		Description: "Publishes one item through an enabled `manual` source; matching members receive it live. Useful for announcements and corrections.",
-		Errors: []int{401, 403, 404, 409, 422}}, s.postItem)
+		Errors:      []int{401, 403, 404, 409, 422}}, s.postItem)
 	huma.Register(api, huma.Operation{OperationID: "rotate-webhook-secret", Method: http.MethodPost, Path: "/api/v1/admin/sources/{id}/webhook-secret", Tags: []string{"admin"},
 		Summary: "Rotate a webhook source's secret", Security: secured, Middlewares: admin,
 		Description: "Generates a new secret and returns it **once**; the old secret stops working immediately. Only for `webhook` sources.",
-		Errors: []int{401, 403, 404, 409, 422}}, s.rotateWebhookSecret)
+		Errors:      []int{401, 403, 404, 409, 422}}, s.rotateWebhookSecret)
 	huma.Register(api, huma.Operation{OperationID: "get-usage", Method: http.MethodGet, Path: "/api/v1/admin/usage", Tags: []string{"admin"},
 		Summary: "Paid API usage this month", Security: secured, Middlewares: admin,
 		Description: "X API spend for the current month against the configured cap (X_MONTHLY_BUDGET_USD). Polling stops automatically when the cap is reached.",
-		Errors: []int{401, 403}}, s.getUsage)
+		Errors:      []int{401, 403}}, s.getUsage)
+	huma.Register(api, huma.Operation{OperationID: "list-alert-templates", Method: http.MethodGet, Path: "/api/v1/alert-templates", Tags: []string{"alerts"},
+		Summary: "Alert templates", Security: secured, Middlewares: member,
+		Description: "Shipped, pre-filled rules. Use one with *Create an alert from a template* (you only supply the values to watch), or copy its settings into a custom rule.", Errors: []int{401}}, s.listTemplates)
+	huma.Register(api, huma.Operation{OperationID: "list-alerts", Method: http.MethodGet, Path: "/api/v1/me/alerts", Tags: []string{"alerts"},
+		Summary: "My alert rules", Security: secured, Middlewares: member,
+		Description: "Includes `paused_reason` when the system auto-paused a rule that fired too often.", Errors: []int{401}}, s.listRules)
+	huma.Register(api, huma.Operation{OperationID: "create-alert", Method: http.MethodPost, Path: "/api/v1/me/alerts", Tags: []string{"alerts"},
+		Summary: "Create an alert rule", Security: secured, Middlewares: member, DefaultStatus: http.StatusCreated, MaxBodyBytes: 64 << 10,
+		Description: "A rule = **scope** (entities, keywords or sources) + optional **types** and **conditions** (same fields as subscription conditions, see `GET /event-types`) + behavior " +
+			"(`cooldown_seconds`, default 300, minimum 10; `severity`; `channels`: `in_app` and/or your channel ids). At most 50 rules. A rule that fires more than the hourly cap is paused automatically. " +
+			"Try it first with *Preview an alert rule*.", Errors: []int{401, 409, 422}}, s.createRule)
+	huma.Register(api, huma.Operation{OperationID: "create-alert-from-template", Method: http.MethodPost, Path: "/api/v1/me/alerts/from-template", Tags: []string{"alerts"},
+		Summary: "Create an alert from a template", Security: secured, Middlewares: member, DefaultStatus: http.StatusCreated, MaxBodyBytes: 64 << 10,
+		Description: "Pick a template id from `GET /alert-templates` and give the values to watch; everything else comes pre-filled. Edit the rule afterwards to tweak it.", Errors: []int{401, 404, 409, 422}}, s.createFromTemplate)
+	huma.Register(api, huma.Operation{OperationID: "preview-alert", Method: http.MethodPost, Path: "/api/v1/me/alerts/preview", Tags: []string{"alerts"},
+		Summary: "Preview an alert rule", Security: secured, Middlewares: member, MaxBodyBytes: 64 << 10,
+		Description: "Replays recently seen events (since the server started, last 24 hours, up to 1000) against the draft and reports how many alerts it would have produced, with examples, " +
+			"after applying cooldown. Nothing is saved or sent. Use it to avoid noisy rules.", Errors: []int{401, 422}}, s.previewRule)
+	huma.Register(api, huma.Operation{OperationID: "list-alert-fires", Method: http.MethodGet, Path: "/api/v1/me/alerts/fires", Tags: []string{"alerts"},
+		Summary: "Recent alerts that fired", Security: secured, Middlewares: member,
+		Description: "Newest first, each with a `reason` explaining why it fired. Use after a WebSocket reconnect to catch up.", Errors: []int{401}}, s.listFires)
+	huma.Register(api, huma.Operation{OperationID: "get-alert", Method: http.MethodGet, Path: "/api/v1/me/alerts/{id}", Tags: []string{"alerts"},
+		Summary: "Get an alert rule", Security: secured, Middlewares: member, Description: "Only your own rules are visible (404 otherwise).", Errors: []int{401, 404}}, s.getRule)
+	huma.Register(api, huma.Operation{OperationID: "update-alert", Method: http.MethodPut, Path: "/api/v1/me/alerts/{id}", Tags: []string{"alerts"},
+		Summary: "Replace an alert rule", Security: secured, Middlewares: member, MaxBodyBytes: 64 << 10,
+		Description: "Send the full rule. Saving with `enabled: true` re-enables a paused rule and clears its paused reason.", Errors: []int{401, 404, 422}}, s.updateRule)
+	huma.Register(api, huma.Operation{OperationID: "delete-alert", Method: http.MethodDelete, Path: "/api/v1/me/alerts/{id}", Tags: []string{"alerts"},
+		Summary: "Delete an alert rule", Security: secured, Middlewares: member, DefaultStatus: http.StatusNoContent, Description: "Deletes the rule and stops it immediately.", Errors: []int{401, 404}}, s.deleteRule)
+
+	huma.Register(api, huma.Operation{OperationID: "list-channels", Method: http.MethodGet, Path: "/api/v1/me/channels", Tags: []string{"channels"},
+		Summary: "My notification channels", Security: secured, Middlewares: member,
+		Description: "`in_app` (live WebSocket) is built in and always available. This lists your outbound webhook channels with their health. Secrets are never shown here.", Errors: []int{401}}, s.listChannels)
+	huma.Register(api, huma.Operation{OperationID: "create-channel", Method: http.MethodPost, Path: "/api/v1/me/channels", Tags: []string{"channels"},
+		Summary: "Add an outbound webhook channel", Security: secured, Middlewares: member, DefaultStatus: http.StatusCreated, MaxBodyBytes: 64 << 10,
+		Description: "Alerts are POSTed to your HTTPS URL as JSON, signed like inbound webhooks (`X-TP-Timestamp`, `X-TP-Signature: sha256=HMAC(secret, \"<timestamp>.<body>\")`). " +
+			"The secret is returned **once**. Failed deliveries are retried with back-off; after 10 consecutive failures the channel is disabled until you re-enable it. At most 5 channels.", Errors: []int{401, 409, 422}}, s.createChannel)
+	huma.Register(api, huma.Operation{OperationID: "list-deliveries", Method: http.MethodGet, Path: "/api/v1/me/channels/deliveries", Tags: []string{"channels"},
+		Summary: "Recent outbound deliveries", Security: secured, Middlewares: member,
+		Description: "Delivery history (status, attempts, error) for your channels, newest first.", Errors: []int{401}}, s.listDeliveries)
+	huma.Register(api, huma.Operation{OperationID: "delete-channel", Method: http.MethodDelete, Path: "/api/v1/me/channels/{id}", Tags: []string{"channels"},
+		Summary: "Delete a channel", Security: secured, Middlewares: member, DefaultStatus: http.StatusNoContent,
+		Description: "Also removes it from your alert rules (rules left without a channel fall back to `in_app`).", Errors: []int{401, 404}}, s.deleteChannel)
+	huma.Register(api, huma.Operation{OperationID: "rotate-channel-secret", Method: http.MethodPost, Path: "/api/v1/me/channels/{id}/rotate-secret", Tags: []string{"channels"},
+		Summary: "Rotate a channel's signing secret", Security: secured, Middlewares: member,
+		Description: "Returns the new secret **once**; the old one stops being used immediately.", Errors: []int{401, 404, 422}}, s.rotateChannelSecret)
+	huma.Register(api, huma.Operation{OperationID: "enable-channel", Method: http.MethodPost, Path: "/api/v1/me/channels/{id}/enable", Tags: []string{"channels"},
+		Summary: "Re-enable a channel", Security: secured, Middlewares: member,
+		Description: "Re-enables a channel that was disabled after repeated failures and resets its failure counter.", Errors: []int{401, 404}}, s.enableChannel)
+	huma.Register(api, huma.Operation{OperationID: "test-channel", Method: http.MethodPost, Path: "/api/v1/me/channels/{id}/test", Tags: []string{"channels"},
+		Summary: "Send a test delivery", Security: secured, Middlewares: member,
+		Description: "Queues a clearly marked test alert (`\"test\": true`) to the channel. Check `GET /me/channels/deliveries` for the result.", Errors: []int{401, 404, 409}}, s.testChannel)
 	return api
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.routes(mux)
-	mux.HandleFunc("GET /ws", s.ws)                            // WebSocket: plain handler, outside OpenAPI
-	mux.HandleFunc("POST /api/v1/hooks/{name}", s.hook)       // inbound webhook: signs the raw body, documented in the overview
+	mux.HandleFunc("GET /ws", s.ws)                     // WebSocket: plain handler, outside OpenAPI
+	mux.HandleFunc("POST /api/v1/hooks/{name}", s.hook) // inbound webhook: signs the raw body, documented in the overview
 
 	var h http.Handler = mux
 	h = bodyLimit(h)

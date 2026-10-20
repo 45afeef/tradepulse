@@ -90,6 +90,9 @@ internal/storage/memory, internal/infrastructure/eventbus   replaceable implemen
 ### Database
 Dev uses the local `postgres` compose service automatically. To use a managed database (Supabase now, any provider later) set `DATABASE_URL` (and `DATABASE_MIGRATION_URL`) in `.env`: nothing else changes. Production **requires** `DATABASE_URL`. Details, Supabase setup and security notes: [`docs/DATABASE.md`](docs/DATABASE.md). Migrations run automatically at startup; `docker compose run --rm check` also runs the Postgres integration tests.
 
+### Alerts and channels
+Rules that push what you must not miss (templates, preview, cooldown, auto-pause) to the live feed and to signed outbound webhooks: [`docs/ALERTS.md`](docs/ALERTS.md).
+
 ### Sources, webhooks and X
 Admins add sources in `/docs` (RSS, web pages, manual, **webhook**, **x**); see `docs/sources/` and [`docs/WEBHOOKS.md`](docs/WEBHOOKS.md). Webhooks need `WEBHOOK_SIGNING_KEY`; X needs `X_BEARER_TOKEN` and is spend-capped by `X_MONTHLY_BUDGET_USD`.
 

@@ -6,8 +6,66 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.7.0-dev] — 2026-10-18 — M5: alerts, templates, preview, guardrails, channels (TP-019, TP-023)
+**Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox). No new dependencies. Run `docker compose run --rm check` (Postgres integration tests included).
+**Suggested commit message:**
+```
+feat(m5): alert rules with guardrails, templates and preview; in-app and signed outbound webhook channels
+
+- rules: scope (entity/keyword/source) + types/conditions + cooldown/severity/channels; explainable fires and history
+- guardrails: cooldown, 50 rules / 5 channels per user, hourly cap with automatic pause (visible reason, live notice)
+- templates (generic + market/status examples), create-from-template, preview over recent events
+- channels: in_app via WebSocket; outbound webhooks (HTTPS only, HMAC-signed, retries, auto-disable, secret shown once, test delivery, history)
+- safefetch.Post (no redirects, same SSRF rules); Hub.Notify; suspension stops/resumes alerts
+- migration 0004 (rules, fires, channels, deliveries; RLS); docs/ALERTS.md; /docs overview + 16 documented endpoints
+- 50 new tests (35 security)
+```
+
+### Why
+M5 completes the product loop: sources -> feed -> alerts you can trust. Spam control and explainability are first-class (D-035...D-038).
+
+### Added
+- **Domain** `alert`: `Spec`/`Rule`, `Fire`, `Channel`, `Delivery`, templates registry, `Preview`; strict `Spec.Normalize` (names, scope, types, conditions via the whitelist, cooldown 10 s...24 h, severity, own channels only).
+- **Engine** (`internal/alerting`): inverted indexes (entity/source/keyword token), whole-phrase keyword matching, per-rule cooldown (restored from `last_fired_at` after restart), hourly cap -> automatic pause (persisted reason, `alert_paused` message), suspension handling, ring buffer of recent events for previews, `Preview` with cooldown/cap simulation.
+- **Sender**: workers, bounded queue (overflow recorded), HMAC-signed JSON, retries (2/10/60 s) for network/5xx/408/429, no retry for 3xx/4xx, delivery history, auto-disable after 10 consecutive failures with `channel_disabled` notice, test deliveries, owner/enabled checks before every send.
+- **API (all documented in /docs):** `GET /alert-templates`; `GET/POST /me/alerts`, `POST /me/alerts/from-template`, `POST /me/alerts/preview`, `GET /me/alerts/fires`, `GET/PUT/DELETE /me/alerts/{id}`; `GET/POST /me/channels`, `GET /me/channels/deliveries`, `DELETE /me/channels/{id}`, `POST /me/channels/{id}/rotate-secret|enable|test`. Tags `alerts`, `channels`; overview section.
+- **Storage:** migration `0004_alerts` (RLS + revokes); Postgres and in-memory repositories; hourly retention (30 days) of fires and deliveries.
+- **safefetch.Post:** same destination rules as Get, never follows redirects, 4 KB response cap. `Hub.Notify` for non-feed messages.
+- **Examples:** alert templates for the market (big mover, volume spike, unusual activity) and status (service not up) domains.
+- **Config:** `ALERT_MAX_FIRES_PER_HOUR` (default 30).
+- **Docs:** `docs/ALERTS.md`; decisions D-035...D-038.
+
+### Changed
+- `api.Deps` gained `Alerts`, `AlertRules`, `AlertFires`, `Channels`, `Deliveries`, `Templates`, `Outbound`; suspend/reactivate also stop/restore alert rules; `main.go` wires the engine, sender, retention and example templates.
+- `delivery.Hub.Deliver` now delegates to the new `Notify`.
+
+### Security notes
+Rules are validated against the field whitelist (no code); users can only see or change their own rules/channels (404 otherwise); channel URLs must be public HTTPS (SSRF-checked at save and at send); outbound secrets are derived with a separate namespace and never listed; redirects are never followed; every send re-checks owner and enabled state; spam is bounded by cooldown, limits and auto-pause.
+
+### Known limitations / open items
+- Not yet run by the owner. Retry queue is in memory (a restart loses pending retries); hourly fire counters reset on restart.
+- Previews only know events seen since the server started.
+- No email/Telegram/push channels yet (add behind `Dispatcher`).
+- Alerts evaluate every event for every enabled rule via indexes; fine for 10-50 members, revisit if volume grows.
+
+### Files (main)
+`internal/domain/alert/*` · `internal/alerting/*` · `internal/api/{alerts,server,docs,admin}.go` · `internal/storage/{memory/alerts.go,postgres/alerts.go,postgres/migrations/0004_*}` · `internal/safefetch/safefetch.go` · `internal/delivery/hub.go` · `examples/*` · `cmd/server/main.go` · `docs/ALERTS.md` · tests
+
+### Next
+Owner run of `check`; try alerts end to end; then M6 (deploy to Cloud Run via GitHub Actions, auth hardening, operator metrics, restore drill).
+
+---
+
+## [0.6.1-dev] — 2026-10-18 — Fix: webhook sources refused; test stabilization
+**Verification:** owner ran `check` on 0.6.0-dev: 8 failures (listed below); fixes applied, not yet re-run.
+**Suggested commit message:** `fix(m4): allow webhook sources in connector validation; stabilize tests`
+- **Bug fixed:** `connector.Registry.Validate` demanded a connector for `webhook` sources, so no webhook source could be created (7 tests). Push sources are now skipped like `manual`.
+- **Tests corrected (author mistakes):** webhook tests decoded `webhook_secret`/`webhook_path` into Go-named fields without JSON tags (now tagged); rate-limit test used a refilling limiter that raced slow PBKDF2 (now no refill); manual-post test dropped topics via full-replace PUT (documented behavior); architecture test matched the injected `x.http.Get` field (regex now requires a non-identifier prefix); memory item-store prune expectation 4 -> 3.
+
+---
+
 ## [0.6.0-dev] — 2026-10-17 — M4: inbound webhooks and X connector (TP-016, TP-022)
-**Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox). Owner verified up to 0.4.0-dev; 0.5.0-dev was delivered but not yet reported. Run `docker compose run --rm check` (no new dependencies since 0.5.0-dev).
+**Verification:** owner ran `check`: only the 8 failures fixed in 0.6.1-dev (everything else in 0.5.0-dev and 0.6.0-dev passed, including Postgres integration tests).
 **Suggested commit message:**
 ```
 feat(m4): inbound webhooks and budget-capped X connector, configured by env

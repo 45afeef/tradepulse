@@ -11,10 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"tradepulse/internal/alerting"
 	"tradepulse/internal/auth"
 	"tradepulse/internal/connector"
 	"tradepulse/internal/config"
 	"tradepulse/internal/delivery"
+	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/invite"
 	"tradepulse/internal/domain/user"
@@ -54,19 +56,29 @@ func newServer(t *testing.T, mutate func(*config.Config)) (*Server, http.Handler
 		conns = append(conns, connector.NewX(fake, connector.XSettings{Token: cfg.XBearerToken, BaseURL: "https://api.x.test",
 			BudgetUSD: cfg.XMonthlyBudgetUSD, CostPerResourceUSD: cfg.XCostPerResourceUSD, MaxPosts: 20}, usage))
 	}
+	reg := event.NewRegistry()
+	hub := delivery.NewHub(log, nil, 2)
+	aRules, aFires, chans, dels := memory.NewAlertRuleRepo(), memory.NewAlertFireRepo(), memory.NewChannelRepo(), memory.NewDeliveryRepo()
+	out := &fakeOut{}
+	lastOut = out
+	testClockOffset = 0
+	engine := alerting.NewEngine(log, aRules, aFires, reg, hub, out, alerting.Config{MaxFiresPerHour: 3,
+		Now: func() time.Time { return time.Now().Add(testClockOffset) }})
 	s, err := New(Deps{
 		Cfg: cfg, Log: log, Users: memory.NewUserRepo(), Feeds: memory.NewFeedRepo(10), JWT: jwt,
 		Invites: memory.NewInviteRepo(), Audit: memory.NewAuditRepo(100),
 		Sources: memory.NewSourceRepo(), Runs: memory.NewRunRepo(), Bus: eventbus.NewMemory(64, log),
 		Connectors: connector.NewRegistry(conns...), Items: memory.NewItemStore(), Usage: usage,
 		Tickets: auth.NewTicketStore(time.Minute), Personalizer: nopPersonalizer{},
-		Hub: delivery.NewHub(log, nil, 2), Registry: event.NewRegistry(),
+		Hub: hub, Registry: reg, Alerts: engine, AlertRules: aRules, AlertFires: aFires, Channels: chans, Deliveries: dels,
+		Templates: alert.NewTemplates(), Outbound: out,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	s.authLim = newLimiter(1000, 1000) // rate-limit tests re-tighten this
 	lastServer = s
+	s.Bus.Subscribe("alerts", engine.Handle)
 	return s, s.Handler()
 }
 
@@ -252,7 +264,7 @@ func TestLoginDoesNotRevealWhetherEmailExists(t *testing.T) {
 
 func TestAuthEndpointsAreRateLimited(t *testing.T) {
 	s, h := newServer(t, nil)
-	s.authLim = newLimiter(0, 5)
+	s.authLim = newLimiter(0, 5) // no refill: the test must not depend on how slow password hashing is
 	limited := false
 	for i := 0; i < 8; i++ {
 		if do(h, "POST", "/api/v1/auth/login", "", `{"email":"x@example.com","password":"wrong-password-1"}`).Code == http.StatusTooManyRequests {

@@ -240,3 +240,39 @@ func TestValidateURLStaticChecks(t *testing.T) {
 		}
 	}
 }
+
+func TestPostSendsBodyAndHeadersAndNeverFollowsRedirects(t *testing.T) {
+	var got, ctype, sig string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b := make([]byte, 100)
+		n, _ := r.Body.Read(b)
+		got, ctype, sig = string(b[:n]), r.Header.Get("Content-Type"), r.Header.Get("X-TP-Signature")
+		if r.URL.Path == "/redir" {
+			http.Redirect(w, r, "http://169.254.169.254/latest/meta-data/", http.StatusFound)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(strings.Repeat("x", 10000)))
+	}))
+	defer srv.Close()
+	f := testFetcher(Options{})
+	h := http.Header{}
+	h.Set("X-TP-Signature", "sha256=abc")
+	resp, err := f.Post(context.Background(), srv.URL+"/hook", []byte(`{"a":1}`), h)
+	if err != nil || resp.Status != 202 || got != `{"a":1}` || ctype != "application/json" || sig != "sha256=abc" || len(resp.Body) != 4096 {
+		t.Fatalf("post: %+v %v body=%q ctype=%q sig=%q", resp, err, got, ctype, sig)
+	}
+	resp, err = f.Post(context.Background(), srv.URL+"/redir", []byte(`{}`), nil)
+	if err != nil || resp.Status != http.StatusFound {
+		t.Fatalf("redirects must be returned, not followed: %+v %v", resp, err)
+	}
+}
+
+func TestPostIsSubjectToTheSameDestinationRules(t *testing.T) {
+	f := New(Options{Resolver: fakeResolver{"evil.example": {netip.MustParseAddr("10.0.0.5")}}})
+	for _, u := range []string{"http://169.254.169.254/", "http://127.0.0.1/", "http://evil.example/", "file:///etc/passwd", "https://u:p@example.com/", "http://example.com:8080/"} {
+		if _, err := f.Post(context.Background(), u, []byte("{}"), nil); err == nil {
+			t.Errorf("POST to %s must be refused", u)
+		}
+	}
+}

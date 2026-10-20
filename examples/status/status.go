@@ -11,7 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/event"
+	"tradepulse/internal/domain/rule"
 	"tradepulse/internal/source"
 )
 
@@ -26,6 +28,13 @@ func RegisterTypes(reg *event.Registry) error {
 		},
 		Title: "{entity} is {status}", Body: "Latency {latency_ms:%.0f} ms", Severity: "notable",
 	})
+}
+
+// RegisterAlertTemplates adds a ready-made alert rule for the status example.
+func RegisterAlertTemplates(t *alert.Templates) error {
+	return t.Register(alert.Template{ID: "service-not-up", Name: "Service not up", Description: "A watched service reports degraded or down.", ScopeKind: "entity",
+		ValuesHint: "service names, e.g. checkout", Types: []string{"service_status"},
+		Conditions: []rule.Condition{{Field: "status", Op: rule.Neq, Value: "up"}}, CooldownSeconds: 300, Severity: "high"})
 }
 
 type Processor struct{}

@@ -14,7 +14,9 @@ import (
 	"sync"
 	"time"
 
+	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/event"
+	"tradepulse/internal/domain/rule"
 	"tradepulse/internal/source"
 )
 
@@ -42,6 +44,24 @@ func RegisterTypes(reg *event.Registry) error {
 	}
 	for _, d := range defs {
 		if err := reg.Register(d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RegisterAlertTemplates adds ready-made alert rules for the market example.
+func RegisterAlertTemplates(t *alert.Templates) error {
+	gte := func(field string, v float64) []rule.Condition { return []rule.Condition{{Field: field, Op: rule.Gte, Value: v}} }
+	for _, x := range []alert.Template{
+		{ID: "big-mover", Name: "Big mover", Description: "A watched symbol moves 2% or more between ticks.", ScopeKind: "entity", ValuesHint: "symbols, e.g. TCS",
+			Types: []string{"price_changed"}, Conditions: gte("abs_change_pct", 2), CooldownSeconds: 600, Severity: "notable"},
+		{ID: "volume-spike", Name: "Volume spike", Description: "Volume is at least 3x its average.", ScopeKind: "entity", ValuesHint: "symbols",
+			Types: []string{"volume_spike"}, Conditions: gte("relative_volume", 3), CooldownSeconds: 900, Severity: "notable"},
+		{ID: "unusual-activity", Name: "Unusual activity", Description: "A big move together with a volume spike.", ScopeKind: "entity", ValuesHint: "symbols",
+			Types: []string{"unusual_activity"}, CooldownSeconds: 1800, Severity: "high"},
+	} {
+		if err := t.Register(x); err != nil {
 			return err
 		}
 	}

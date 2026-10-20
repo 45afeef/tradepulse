@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/source"
 )
@@ -31,5 +32,24 @@ func TestStatusRejectsInvalid(t *testing.T) {
 		if _, err := NewProcessor().Process(source.RawMessage{Payload: []byte(b)}); err == nil {
 			t.Errorf("expected error for %s", b)
 		}
+	}
+}
+
+func TestAlertTemplatesAreValid(t *testing.T) {
+	reg := event.NewRegistry()
+	if err := RegisterTypes(reg); err != nil {
+		t.Fatal(err)
+	}
+	ts := alert.NewTemplates()
+	if err := RegisterAlertTemplates(ts); err != nil {
+		t.Fatal(err)
+	}
+	for _, x := range ts.List() {
+		if _, err := x.Spec([]string{"checkout"}).Normalize(reg, nil); err != nil {
+			t.Errorf("template %s does not normalize against the registry: %v", x.ID, err)
+		}
+	}
+	if _, ok := ts.Get("service-not-up"); !ok {
+		t.Fatal("service-not-up missing")
 	}
 }

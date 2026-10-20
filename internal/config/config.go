@@ -42,6 +42,7 @@ type Config struct {
 
 	WebhookSigningKey     string // secret; enables inbound webhooks when set
 	WebhookRatePerMinute  int
+	AlertMaxFiresPerHour  int // a rule firing more often is auto-paused
 
 	// Optional first-admin bootstrap (idempotent; remove from env after first start).
 	BootstrapAdminEmail    string
@@ -145,6 +146,9 @@ func Load() (Config, error) {
 	}
 	if c.WebhookRatePerMinute, err = strconv.Atoi(get("WEBHOOK_RATE_PER_MINUTE", "60")); err != nil || c.WebhookRatePerMinute < 1 || c.WebhookRatePerMinute > 6000 {
 		return c, errors.New("WEBHOOK_RATE_PER_MINUTE must be an integer 1-6000")
+	}
+	if c.AlertMaxFiresPerHour, err = strconv.Atoi(get("ALERT_MAX_FIRES_PER_HOUR", "30")); err != nil || c.AlertMaxFiresPerHour < 1 || c.AlertMaxFiresPerHour > 1000 {
+		return c, errors.New("ALERT_MAX_FIRES_PER_HOUR must be an integer 1-1000")
 	}
 	return c, nil
 }

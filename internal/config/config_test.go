@@ -8,7 +8,7 @@ import (
 
 func baseEnv(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{"APP_ENV", "DOCS_ENABLED", "SIM_DEMO", "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "DATABASE_URL", "DATABASE_MIGRATION_URL", "DB_MAX_CONNS", "DB_SIMPLE_PROTOCOL", "SOURCE_MIN_INTERVAL_SECONDS", "SOURCE_MAX_INTERVAL_SECONDS", "X_BEARER_TOKEN", "X_API_BASE_URL", "X_MONTHLY_BUDGET_USD", "WEBHOOK_SIGNING_KEY", "WEBHOOK_RATE_PER_MINUTE", "X_COST_PER_RESOURCE_USD", "X_MAX_POSTS_PER_FETCH", "FETCH_USER_AGENT", "TRUST_PROXY", "JWT_TTL", "SIM_INTERVAL", "LOG_LEVEL"} {
+	for _, k := range []string{"APP_ENV", "DOCS_ENABLED", "SIM_DEMO", "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "DATABASE_URL", "DATABASE_MIGRATION_URL", "DB_MAX_CONNS", "DB_SIMPLE_PROTOCOL", "SOURCE_MIN_INTERVAL_SECONDS", "SOURCE_MAX_INTERVAL_SECONDS", "X_BEARER_TOKEN", "X_API_BASE_URL", "X_MONTHLY_BUDGET_USD", "WEBHOOK_SIGNING_KEY", "WEBHOOK_RATE_PER_MINUTE", "X_COST_PER_RESOURCE_USD", "X_MAX_POSTS_PER_FETCH", "FETCH_USER_AGENT", "ALERT_MAX_FIRES_PER_HOUR", "TRUST_PROXY", "JWT_TTL", "SIM_INTERVAL", "LOG_LEVEL"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("JWT_SECRET", strings.Repeat("s", 40))
@@ -184,5 +184,22 @@ func TestLogValueRedactsWebhookKey(t *testing.T) {
 	c, _ := Load()
 	if out := fmt.Sprintf("%v", c.LogValue()); strings.Contains(out, "webhook-key-") {
 		t.Fatalf("webhook signing key leaked: %s", out)
+	}
+}
+
+func TestAlertSettings(t *testing.T) {
+	baseEnv(t)
+	if cfg, err := Load(); err != nil || cfg.AlertMaxFiresPerHour != 30 {
+		t.Fatalf("default: %+v %v", cfg.AlertMaxFiresPerHour, err)
+	}
+	t.Setenv("ALERT_MAX_FIRES_PER_HOUR", "100")
+	if cfg, err := Load(); err != nil || cfg.AlertMaxFiresPerHour != 100 {
+		t.Fatalf("override: %v", err)
+	}
+	for _, bad := range []string{"0", "-1", "5000", "many"} {
+		t.Setenv("ALERT_MAX_FIRES_PER_HOUR", bad)
+		if _, err := Load(); err == nil {
+			t.Errorf("ALERT_MAX_FIRES_PER_HOUR=%s accepted", bad)
+		}
 	}
 }

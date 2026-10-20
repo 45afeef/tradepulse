@@ -44,6 +44,13 @@ Every delivered item has a **reason** explaining which subscription matched.
 ## Sources
 Items come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). §GET /api/v1/sources§ lists the enabled ones: subscribe with kind §source§ and the source's name, or with kind §entity§ and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.
 
+## Alerts and channels
+The feed shows everything that matches your subscriptions; **alerts** are the subset you must not miss, pushed to you immediately.
+1. §GET /api/v1/alert-templates§ lists ready-made rules, or build your own: **scope** (entities / keywords / sources) + optional **types** and **conditions** (same fields as in subscriptions).
+2. §POST /api/v1/me/alerts/preview§ replays recent events against your draft ("would have fired 7 times") before you save it. §POST /api/v1/me/alerts§ (or §/from-template§) saves it.
+3. When a rule fires you get a live WebSocket message §{"type":"alert","data":{...}}§ (channel §in_app§) and/or a signed POST to your own HTTPS endpoint (§POST /api/v1/me/channels§; signed like inbound webhooks, retried, auto-disabled after repeated failures). Every fire has a **reason**; history: §GET /api/v1/me/alerts/fires§.
+4. Guardrails: per-rule **cooldown** (default 5 minutes), at most 50 rules and 5 channels per user, and a rule that fires too often in an hour is **paused automatically** (WebSocket message §alert_paused§, §paused_reason§ on the rule). Re-enable it by saving it with §enabled: true§ after tightening it.
+
 ## Inbound webhooks (push items from your own systems)
 An admin creates a source of type §webhook§; the response shows its **secret once** and its path (§/api/v1/hooks/<name>§). Then POST JSON from any system (n8n, Zapier, scripts):
 §§§json
@@ -81,5 +88,7 @@ const (
 	tagMe       = "Your own data: subscriptions (what you receive) and your feed history. Requires a bearer token."
 	tagCatalog  = "Discover event types and the fields usable in subscription conditions."
 	tagRealtime = "Live delivery over WebSocket. Get a one-time ticket here, then connect to /ws."
+	tagAlerts   = "Rules that push the items you cannot afford to miss: templates, custom rules, preview, history. Requires a bearer token."
+	tagChannels = "Where alerts are delivered: in-app (built in) and signed outbound webhooks you register."
 	tagAdmin    = "Administrator-only: invites, members and the audit log. Every action is audited."
 )

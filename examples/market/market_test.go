@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/infrastructure/eventbus"
 	"tradepulse/internal/source"
@@ -81,5 +82,24 @@ func TestDetectorFiresOnceWithCooldown(t *testing.T) {
 	case e := <-got:
 		t.Fatalf("cooldown violated: %+v", e)
 	case <-time.After(150 * time.Millisecond):
+	}
+}
+
+func TestAlertTemplatesAreValid(t *testing.T) {
+	reg := event.NewRegistry()
+	if err := RegisterTypes(reg); err != nil {
+		t.Fatal(err)
+	}
+	ts := alert.NewTemplates()
+	if err := RegisterAlertTemplates(ts); err != nil {
+		t.Fatal(err)
+	}
+	for _, x := range ts.List() {
+		if _, err := x.Spec([]string{"tcs"}).Normalize(reg, nil); err != nil {
+			t.Errorf("template %s does not normalize against the registry: %v", x.ID, err)
+		}
+	}
+	if _, ok := ts.Get("big-mover"); !ok {
+		t.Fatal("big-mover missing")
 	}
 }

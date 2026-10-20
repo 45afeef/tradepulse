@@ -34,17 +34,22 @@ func NewHub(log *slog.Logger, allowedOrigins []string, maxPerUser int) *Hub {
 	return &Hub{log: log, origins: o, maxPerUser: maxPerUser, clients: map[string]map[*client]struct{}{}}
 }
 
-// Deliver implements personalization.Deliverer. Slow consumers are
-// disconnected instead of blocking the pipeline.
-func (h *Hub) Deliver(_ context.Context, item feed.FeedItem) {
-	msg, err := json.Marshal(envelope{Type: "feed_item", Data: item})
+// Deliver implements personalization.Deliverer (feed items).
+func (h *Hub) Deliver(ctx context.Context, item feed.FeedItem) {
+	h.Notify(ctx, item.UserID, "feed_item", item)
+}
+
+// Notify sends {"type": kind, "data": data} to all of a user's connections. Slow
+// consumers are disconnected instead of blocking the pipeline.
+func (h *Hub) Notify(_ context.Context, userID, kind string, data any) {
+	msg, err := json.Marshal(envelope{Type: kind, Data: data})
 	if err != nil {
-		h.log.Error("marshal feed item", "err", err)
+		h.log.Error("marshal message", "kind", kind, "err", err)
 		return
 	}
 	var slow []*client
 	h.mu.RLock()
-	for c := range h.clients[item.UserID] {
+	for c := range h.clients[userID] {
 		select {
 		case c.send <- msg:
 		default:
@@ -53,7 +58,7 @@ func (h *Hub) Deliver(_ context.Context, item feed.FeedItem) {
 	}
 	h.mu.RUnlock()
 	for _, c := range slow {
-		h.log.Warn("disconnecting slow websocket client", "user", item.UserID)
+		h.log.Warn("disconnecting slow websocket client", "user", userID)
 		c.close()
 	}
 }

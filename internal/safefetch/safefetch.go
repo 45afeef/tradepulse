@@ -8,6 +8,7 @@
 package safefetch
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -50,6 +51,7 @@ type Response struct {
 
 type Fetcher struct {
 	client   *http.Client
+	post     *http.Client // never follows redirects (webhook deliveries)
 	maxBytes int64
 	ua       string
 	resolver Resolver
@@ -91,6 +93,7 @@ func (f *Fetcher) build(timeout time.Duration, maxRedirects int) {
 		IdleConnTimeout:       30 * time.Second,
 		DisableKeepAlives:     false,
 	}
+	f.post = &http.Client{Transport: tr, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	f.client = &http.Client{
 		Transport: tr, // no cookie jar
 		Timeout:   timeout,
@@ -256,4 +259,38 @@ func ValidateURL(raw string) error {
 		return ErrBlocked
 	}
 	return nil
+}
+
+// Post sends a body (e.g. a signed webhook delivery) with the same protections as Get
+// (IP validation at dial time, ports, timeouts, no proxy, no cookies). Redirects are
+// NOT followed: a 3xx is returned as-is so callers can treat it as a failure. Only the
+// first 4 KB of the response body is returned.
+func (f *Fetcher) Post(ctx context.Context, rawURL string, body []byte, hdr http.Header) (*Response, error) {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return nil, ErrURL
+	}
+	if err := f.validateURL(u); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
+	if err != nil {
+		return nil, ErrURL
+	}
+	for k, vs := range hdr {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
+	if req.Header.Get("Content-Type") == "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("User-Agent", f.ua)
+	resp, err := f.post.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	return &Response{Status: resp.StatusCode, Header: resp.Header, Body: b, FinalURL: u.String()}, nil
 }

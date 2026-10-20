@@ -102,6 +102,106 @@
         ],
         "type": "object"
       },
+      "ChannelBody": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "examples": [
+              "My n8n"
+            ],
+            "maxLength": 60,
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "webhook"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "description": "HTTPS endpoint that receives signed alert deliveries",
+            "examples": [
+              "https://example.com/hooks/tradepulse"
+            ],
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "url"
+        ],
+        "type": "object"
+      },
+      "ChannelListBody": {
+        "additionalProperties": false,
+        "properties": {
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/ChannelView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "channels"
+        ],
+        "type": "object"
+      },
+      "ChannelView": {
+        "additionalProperties": false,
+        "properties": {
+          "consecutive_failures": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "disabled_reason": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_delivery_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "secret": {
+            "description": "Signing secret: shown ONLY at creation and rotation",
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "name",
+          "url",
+          "enabled",
+          "consecutive_failures",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "Condition": {
         "additionalProperties": false,
         "properties": {
@@ -189,6 +289,66 @@
         "required": [
           "email",
           "password"
+        ],
+        "type": "object"
+      },
+      "DeliveriesBody": {
+        "additionalProperties": false,
+        "properties": {
+          "deliveries": {
+            "items": {
+              "$ref": "#/components/schemas/Delivery"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "deliveries"
+        ],
+        "type": "object"
+      },
+      "Delivery": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "attempts": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "channel_id": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "fire_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "status": {
+            "description": "HTTP status of the last attempt",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "channel_id",
+          "fire_id",
+          "at",
+          "ok",
+          "attempts"
         ],
         "type": "object"
       },
@@ -427,6 +587,131 @@
         ],
         "type": "object"
       },
+      "Fire": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "entities": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "event_id": {
+            "type": "string"
+          },
+          "fired_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "reason": {
+            "description": "Why this alert fired (explainability)",
+            "type": "string"
+          },
+          "rule_id": {
+            "type": "string"
+          },
+          "rule_name": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "rule_id",
+          "event_id",
+          "rule_name",
+          "severity",
+          "title",
+          "body",
+          "source",
+          "entities",
+          "reason",
+          "fired_at"
+        ],
+        "type": "object"
+      },
+      "FiresBody": {
+        "additionalProperties": false,
+        "properties": {
+          "fires": {
+            "items": {
+              "$ref": "#/components/schemas/Fire"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "fires"
+        ],
+        "type": "object"
+      },
+      "FromTemplateBody": {
+        "additionalProperties": false,
+        "properties": {
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "Optional rule name",
+            "maxLength": 80,
+            "type": "string"
+          },
+          "template_id": {
+            "examples": [
+              "keyword-mention"
+            ],
+            "maxLength": 64,
+            "type": "string"
+          },
+          "values": {
+            "description": "Scope values (see the template's values_hint)",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "template_id",
+          "values"
+        ],
+        "type": "object"
+      },
       "InviteCreatedBody": {
         "additionalProperties": false,
         "properties": {
@@ -574,6 +859,64 @@
         ],
         "type": "object"
       },
+      "Preview": {
+        "additionalProperties": false,
+        "properties": {
+          "examined": {
+            "description": "Events replayed (seen since the server started, last 24 hours, up to 1000)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "examples": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewExample"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "would_fire": {
+            "description": "Alerts after applying cooldown",
+            "format": "int64",
+            "type": "integer"
+          },
+          "would_match": {
+            "description": "Events matching before cooldown",
+            "format": "int64",
+            "type": "integer"
+          },
+          "would_pause": {
+            "description": "True if the hourly cap would auto-pause this rule",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "examined",
+          "would_fire",
+          "would_match",
+          "would_pause",
+          "examples"
+        ],
+        "type": "object"
+      },
+      "PreviewExample": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "title"
+        ],
+        "type": "object"
+      },
       "PreviewItem": {
         "additionalProperties": false,
         "properties": {
@@ -679,6 +1022,105 @@
         ],
         "type": "object"
       },
+      "RuleListBody": {
+        "additionalProperties": false,
+        "properties": {
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "rules"
+        ],
+        "type": "object"
+      },
+      "RuleView": {
+        "additionalProperties": false,
+        "properties": {
+          "channels": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/Condition"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cooldown_seconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_fired_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "paused_reason": {
+            "description": "Why the system paused this rule (re-enable it after tightening the rule)",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "types",
+          "conditions",
+          "cooldown_seconds",
+          "severity",
+          "channels",
+          "enabled",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
       "RunView": {
         "additionalProperties": false,
         "properties": {
@@ -720,6 +1162,37 @@
           "items_seen",
           "items_new",
           "items_published"
+        ],
+        "type": "object"
+      },
+      "Scope": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "description": "entity: item lists the entity; keyword: whole phrase in title/summary; source: item comes from the source",
+            "enum": [
+              "entity",
+              "keyword",
+              "source"
+            ],
+            "type": "string"
+          },
+          "values": {
+            "description": "Any of these matches",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "values"
         ],
         "type": "object"
       },
@@ -991,6 +1464,81 @@
         ],
         "type": "object"
       },
+      "Spec": {
+        "additionalProperties": false,
+        "properties": {
+          "channels": {
+            "description": "'in_app' and/or ids of your channels (default: in_app)",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "conditions": {
+            "description": "All must hold",
+            "items": {
+              "$ref": "#/components/schemas/Condition"
+            },
+            "maxItems": 10,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cooldown_seconds": {
+            "description": "Minimum seconds between two fires of this rule (default 300, minimum 10)",
+            "format": "int64",
+            "maximum": 86400,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enabled": {
+            "description": "Disabled rules never fire",
+            "type": "boolean"
+          },
+          "name": {
+            "examples": [
+              "Big movers"
+            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "severity": {
+            "description": "Default notable",
+            "enum": [
+              "info",
+              "notable",
+              "high"
+            ],
+            "type": "string"
+          },
+          "types": {
+            "description": "Only these event types (empty = all)",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "scope",
+          "enabled"
+        ],
+        "type": "object"
+      },
       "StatusBody": {
         "additionalProperties": false,
         "properties": {
@@ -1052,6 +1600,88 @@
         ],
         "type": "object"
       },
+      "Template": {
+        "additionalProperties": false,
+        "properties": {
+          "conditions": {
+            "items": {
+              "$ref": "#/components/schemas/Condition"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cooldown_seconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "examples": [
+              "keyword-mention"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope_kind": {
+            "enum": [
+              "entity",
+              "keyword",
+              "source"
+            ],
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "types": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "values_hint": {
+            "description": "What to put in scope.values",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "scope_kind",
+          "values_hint",
+          "cooldown_seconds",
+          "severity"
+        ],
+        "type": "object"
+      },
+      "TemplatesBody": {
+        "additionalProperties": false,
+        "properties": {
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/Template"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "templates"
+        ],
+        "type": "object"
+      },
       "TestBody": {
         "additionalProperties": false,
         "properties": {
@@ -1080,6 +1710,18 @@
           "ok",
           "count",
           "preview"
+        ],
+        "type": "object"
+      },
+      "TestSentBody": {
+        "additionalProperties": false,
+        "properties": {
+          "queued": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "queued"
         ],
         "type": "object"
       },
@@ -1308,7 +1950,7 @@
     }
   },
   "info": {
-    "description": "\n**TradePulse** collects information from many sources, normalizes it into *events*, and delivers\n**the items relevant to you** in one live feed, with automatic alerts. Access is **invite-only**.\n\n## Quick start (5 minutes)\n1. **Get an invite code** from an administrator (looks like `tp_inv_…`). Codes are single-use and expire.\n2. `POST /api/v1/auth/register` with your email, a password (10+ characters) and the invite code. The response contains a **token**.\n3. Click **Authorize** in this page (or send `Authorization: Bearer \u003ctoken\u003e` on every request).\n4. `GET /api/v1/event-types` shows what kinds of events exist and **which fields you can filter on**.\n5. `PUT /api/v1/me/subscriptions` tells the system what you care about (see *Subscriptions* below). **Until you subscribe, your feed is empty.**\n6. `GET /api/v1/me/feed` returns recent items. For live delivery: `POST /api/v1/ws-ticket`, then open the WebSocket (see *Real-time*).\n\n## Authentication\n- Register or log in to get a JWT; send it as `Authorization: Bearer \u003ctoken\u003e`.\n- Tokens expire (default 12 h); log in again to get a new one.\n- A **suspended** account is rejected everywhere immediately and its live connections are closed.\n- Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see `Retry-After`).\n\n## Subscriptions (what you receive)\nA subscription says *what to watch*; optional **types** and **conditions** narrow it. An item is delivered if **any** subscription matches, unless it is **muted**.\n\n| kind | matches when |\n|---|---|\n| `entity` | the event lists that entity (case-insensitive), e.g. `tcs`, `checkout` |\n| `keyword` | the whole word/phrase appears in the item's title or text, e.g. `repo rate` |\n| `source` | the event comes from that source id, e.g. `status_sim` |\n\n**Conditions** are `field operator value` checks; **all** must hold. Operators: `\u003e` `\u003e=` `\u003c` `\u003c=` `==` `!=` `in` `contains` `any_of`.\nFields come from `GET /api/v1/event-types` (built-in: `type`, `source`, `title`, `summary`, `url`, `entity`; plus each type's own fields).\nIf an event does not have the field, the condition is simply *false*.\n\nExample: notify me when *checkout* is anything other than up:\n```json\n{\"subscriptions\":[{\"kind\":\"entity\",\"value\":\"checkout\",\"conditions\":[{\"field\":\"status\",\"op\":\"!=\",\"value\":\"up\"}]}],\n \"muted\":[\"maintenance\"]}\n```\nEvery delivered item has a **reason** explaining which subscription matched.\n\n## Sources\nItems come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). `GET /api/v1/sources` lists the enabled ones: subscribe with kind `source` and the source's name, or with kind `entity` and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.\n\n## Inbound webhooks (push items from your own systems)\nAn admin creates a source of type `webhook`; the response shows its **secret once** and its path (`/api/v1/hooks/\u003cname\u003e`). Then POST JSON from any system (n8n, Zapier, scripts):\n```json\n{\"id\":\"optional-unique-id\",\"title\":\"Required headline\",\"summary\":\"optional\",\"url\":\"https://example.com/story\",\"entities\":[\"topic\"],\"published_at\":\"2026-10-17T10:00:00Z\"}\n```\n- **hmac** (default): send `X-TP-Timestamp` (unix seconds, within 5 minutes) and `X-TP-Signature: sha256=\u003chex\u003e` where hex = HMAC-SHA256(secret, \"\u003ctimestamp\u003e.\u003craw body\u003e\").\n- **token**: send the secret as `X-Webhook-Token` or `Authorization: Bearer \u003csecret\u003e` (for tools that cannot sign).\n- Responses: `201` accepted, `200` duplicate (same `id` or same title+url: safe to retry), `401` bad credentials (also for unknown sources), `413` over 64 KB, `422` invalid payload, `429` rate limited, `503` webhooks not enabled on the server. Details and code samples: `docs/WEBHOOKS.md` in the repository.\n\n## Real-time (WebSocket)\n1. `POST /api/v1/ws-ticket` (with your token) → a **one-time ticket valid for 30 seconds**.\n2. Connect to `ws(s)://\u003chost\u003e/ws?ticket=\u003cticket\u003e` (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.\n3. Messages are JSON text frames:\n```json\n{\"type\":\"connected\"}\n{\"type\":\"feed_item\",\"data\":{\"id\":\"…\",\"title\":\"checkout is down\",\"body\":\"Latency 950 ms\",\"severity\":\"notable\",\"reason\":\"Matched your entity subscription \\\"checkout\\\"\",\"created_at\":\"…\"}}\n```\n4. **Reconnect with backoff** when the connection drops (deploys and idle limits close connections). After reconnecting, call `GET /api/v1/me/feed` to catch up on anything missed.\n5. Limits: at most 5 simultaneous connections per user; slow readers are disconnected. Close code 1008 = policy (cap/suspended), 1001 = server going away.\nThe WebSocket cannot be tried from this page; use a client such as Postman or `websocat`.\n\n## Errors\nErrors use **RFC 9457 problem JSON**: `{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"…\"}`. Validation failures (422) list the offending fields.\nCommon codes: `401` missing/invalid token · `403` not allowed (e.g. not an admin, bad invite) · `409` conflict · `422` invalid input · `429` rate limited · `413` body too large.\n\n## Administrators\nEndpoints under **admin** require the `admin` role (others get 403). Typical flow: create an invite → share the code → watch its status → suspend/reactivate members → review the audit log.\n",
+    "description": "\n**TradePulse** collects information from many sources, normalizes it into *events*, and delivers\n**the items relevant to you** in one live feed, with automatic alerts. Access is **invite-only**.\n\n## Quick start (5 minutes)\n1. **Get an invite code** from an administrator (looks like `tp_inv_…`). Codes are single-use and expire.\n2. `POST /api/v1/auth/register` with your email, a password (10+ characters) and the invite code. The response contains a **token**.\n3. Click **Authorize** in this page (or send `Authorization: Bearer \u003ctoken\u003e` on every request).\n4. `GET /api/v1/event-types` shows what kinds of events exist and **which fields you can filter on**.\n5. `PUT /api/v1/me/subscriptions` tells the system what you care about (see *Subscriptions* below). **Until you subscribe, your feed is empty.**\n6. `GET /api/v1/me/feed` returns recent items. For live delivery: `POST /api/v1/ws-ticket`, then open the WebSocket (see *Real-time*).\n\n## Authentication\n- Register or log in to get a JWT; send it as `Authorization: Bearer \u003ctoken\u003e`.\n- Tokens expire (default 12 h); log in again to get a new one.\n- A **suspended** account is rejected everywhere immediately and its live connections are closed.\n- Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see `Retry-After`).\n\n## Subscriptions (what you receive)\nA subscription says *what to watch*; optional **types** and **conditions** narrow it. An item is delivered if **any** subscription matches, unless it is **muted**.\n\n| kind | matches when |\n|---|---|\n| `entity` | the event lists that entity (case-insensitive), e.g. `tcs`, `checkout` |\n| `keyword` | the whole word/phrase appears in the item's title or text, e.g. `repo rate` |\n| `source` | the event comes from that source id, e.g. `status_sim` |\n\n**Conditions** are `field operator value` checks; **all** must hold. Operators: `\u003e` `\u003e=` `\u003c` `\u003c=` `==` `!=` `in` `contains` `any_of`.\nFields come from `GET /api/v1/event-types` (built-in: `type`, `source`, `title`, `summary`, `url`, `entity`; plus each type's own fields).\nIf an event does not have the field, the condition is simply *false*.\n\nExample: notify me when *checkout* is anything other than up:\n```json\n{\"subscriptions\":[{\"kind\":\"entity\",\"value\":\"checkout\",\"conditions\":[{\"field\":\"status\",\"op\":\"!=\",\"value\":\"up\"}]}],\n \"muted\":[\"maintenance\"]}\n```\nEvery delivered item has a **reason** explaining which subscription matched.\n\n## Sources\nItems come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). `GET /api/v1/sources` lists the enabled ones: subscribe with kind `source` and the source's name, or with kind `entity` and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.\n\n## Alerts and channels\nThe feed shows everything that matches your subscriptions; **alerts** are the subset you must not miss, pushed to you immediately.\n1. `GET /api/v1/alert-templates` lists ready-made rules, or build your own: **scope** (entities / keywords / sources) + optional **types** and **conditions** (same fields as in subscriptions).\n2. `POST /api/v1/me/alerts/preview` replays recent events against your draft (\"would have fired 7 times\") before you save it. `POST /api/v1/me/alerts` (or `/from-template`) saves it.\n3. When a rule fires you get a live WebSocket message `{\"type\":\"alert\",\"data\":{...}}` (channel `in_app`) and/or a signed POST to your own HTTPS endpoint (`POST /api/v1/me/channels`; signed like inbound webhooks, retried, auto-disabled after repeated failures). Every fire has a **reason**; history: `GET /api/v1/me/alerts/fires`.\n4. Guardrails: per-rule **cooldown** (default 5 minutes), at most 50 rules and 5 channels per user, and a rule that fires too often in an hour is **paused automatically** (WebSocket message `alert_paused`, `paused_reason` on the rule). Re-enable it by saving it with `enabled: true` after tightening it.\n\n## Inbound webhooks (push items from your own systems)\nAn admin creates a source of type `webhook`; the response shows its **secret once** and its path (`/api/v1/hooks/\u003cname\u003e`). Then POST JSON from any system (n8n, Zapier, scripts):\n```json\n{\"id\":\"optional-unique-id\",\"title\":\"Required headline\",\"summary\":\"optional\",\"url\":\"https://example.com/story\",\"entities\":[\"topic\"],\"published_at\":\"2026-10-17T10:00:00Z\"}\n```\n- **hmac** (default): send `X-TP-Timestamp` (unix seconds, within 5 minutes) and `X-TP-Signature: sha256=\u003chex\u003e` where hex = HMAC-SHA256(secret, \"\u003ctimestamp\u003e.\u003craw body\u003e\").\n- **token**: send the secret as `X-Webhook-Token` or `Authorization: Bearer \u003csecret\u003e` (for tools that cannot sign).\n- Responses: `201` accepted, `200` duplicate (same `id` or same title+url: safe to retry), `401` bad credentials (also for unknown sources), `413` over 64 KB, `422` invalid payload, `429` rate limited, `503` webhooks not enabled on the server. Details and code samples: `docs/WEBHOOKS.md` in the repository.\n\n## Real-time (WebSocket)\n1. `POST /api/v1/ws-ticket` (with your token) → a **one-time ticket valid for 30 seconds**.\n2. Connect to `ws(s)://\u003chost\u003e/ws?ticket=\u003cticket\u003e` (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.\n3. Messages are JSON text frames:\n```json\n{\"type\":\"connected\"}\n{\"type\":\"feed_item\",\"data\":{\"id\":\"…\",\"title\":\"checkout is down\",\"body\":\"Latency 950 ms\",\"severity\":\"notable\",\"reason\":\"Matched your entity subscription \\\"checkout\\\"\",\"created_at\":\"…\"}}\n```\n4. **Reconnect with backoff** when the connection drops (deploys and idle limits close connections). After reconnecting, call `GET /api/v1/me/feed` to catch up on anything missed.\n5. Limits: at most 5 simultaneous connections per user; slow readers are disconnected. Close code 1008 = policy (cap/suspended), 1001 = server going away.\nThe WebSocket cannot be tried from this page; use a client such as Postman or `websocat`.\n\n## Errors\nErrors use **RFC 9457 problem JSON**: `{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"…\"}`. Validation failures (422) list the offending fields.\nCommon codes: `401` missing/invalid token · `403` not allowed (e.g. not an admin, bad invite) · `409` conflict · `422` invalid input · `429` rate limited · `413` body too large.\n\n## Administrators\nEndpoints under **admin** require the `admin` role (others get 403). Typical flow: create an invite → share the code → watch its status → suspend/reactivate members → review the audit log.\n",
     "title": "TradePulse API",
     "version": "0.3.0"
   },
@@ -2709,6 +3351,53 @@
         ]
       }
     },
+    "/api/v1/alert-templates": {
+      "get": {
+        "description": "Shipped, pre-filled rules. Use one with *Create an alert from a template* (you only supply the values to watch), or copy its settings into a custom rule.",
+        "operationId": "list-alert-templates",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplatesBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Alert templates",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "description": "Unknown email and wrong password return the same 401 (no account enumeration). A suspended account gets 403. Rate limited per IP.",
@@ -2917,6 +3606,1110 @@
         "summary": "Event types and filterable fields",
         "tags": [
           "catalog"
+        ]
+      }
+    },
+    "/api/v1/me/alerts": {
+      "get": {
+        "description": "Includes `paused_reason` when the system auto-paused a rule that fired too often.",
+        "operationId": "list-alerts",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleListBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My alert rules",
+        "tags": [
+          "alerts"
+        ]
+      },
+      "post": {
+        "description": "A rule = **scope** (entities, keywords or sources) + optional **types** and **conditions** (same fields as subscription conditions, see `GET /event-types`) + behavior (`cooldown_seconds`, default 300, minimum 10; `severity`; `channels`: `in_app` and/or your channel ids). At most 50 rules. A rule that fires more than the hourly cap is paused automatically. Try it first with *Preview an alert rule*.",
+        "operationId": "create-alert",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Spec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create an alert rule",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/v1/me/alerts/fires": {
+      "get": {
+        "description": "Newest first, each with a `reason` explaining why it fired. Use after a WebSocket reconnect to catch up.",
+        "operationId": "list-alert-fires",
+        "parameters": [
+          {
+            "description": "Max entries, newest first",
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "description": "Max entries, newest first",
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FiresBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recent alerts that fired",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/v1/me/alerts/from-template": {
+      "post": {
+        "description": "Pick a template id from `GET /alert-templates` and give the values to watch; everything else comes pre-filled. Edit the rule afterwards to tweak it.",
+        "operationId": "create-alert-from-template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FromTemplateBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create an alert from a template",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/v1/me/alerts/preview": {
+      "post": {
+        "description": "Replays recently seen events (since the server started, last 24 hours, up to 1000) against the draft and reports how many alerts it would have produced, with examples, after applying cooldown. Nothing is saved or sent. Use it to avoid noisy rules.",
+        "operationId": "preview-alert",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Spec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Preview an alert rule",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/v1/me/alerts/{id}": {
+      "delete": {
+        "description": "Deletes the rule and stops it immediately.",
+        "operationId": "delete-alert",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete an alert rule",
+        "tags": [
+          "alerts"
+        ]
+      },
+      "get": {
+        "description": "Only your own rules are visible (404 otherwise).",
+        "operationId": "get-alert",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get an alert rule",
+        "tags": [
+          "alerts"
+        ]
+      },
+      "put": {
+        "description": "Send the full rule. Saving with `enabled: true` re-enables a paused rule and clears its paused reason.",
+        "operationId": "update-alert",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Spec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace an alert rule",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
+    "/api/v1/me/channels": {
+      "get": {
+        "description": "`in_app` (live WebSocket) is built in and always available. This lists your outbound webhook channels with their health. Secrets are never shown here.",
+        "operationId": "list-channels",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelListBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My notification channels",
+        "tags": [
+          "channels"
+        ]
+      },
+      "post": {
+        "description": "Alerts are POSTed to your HTTPS URL as JSON, signed like inbound webhooks (`X-TP-Timestamp`, `X-TP-Signature: sha256=HMAC(secret, \"\u003ctimestamp\u003e.\u003cbody\u003e\")`). The secret is returned **once**. Failed deliveries are retried with back-off; after 10 consecutive failures the channel is disabled until you re-enable it. At most 5 channels.",
+        "operationId": "create-channel",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add an outbound webhook channel",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/me/channels/deliveries": {
+      "get": {
+        "description": "Delivery history (status, attempts, error) for your channels, newest first.",
+        "operationId": "list-deliveries",
+        "parameters": [
+          {
+            "description": "Max entries, newest first",
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 50,
+              "description": "Max entries, newest first",
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveriesBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recent outbound deliveries",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/me/channels/{id}": {
+      "delete": {
+        "description": "Also removes it from your alert rules (rules left without a channel fall back to `in_app`).",
+        "operationId": "delete-channel",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a channel",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/me/channels/{id}/enable": {
+      "post": {
+        "description": "Re-enables a channel that was disabled after repeated failures and resets its failure counter.",
+        "operationId": "enable-channel",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Re-enable a channel",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/me/channels/{id}/rotate-secret": {
+      "post": {
+        "description": "Returns the new secret **once**; the old one stops being used immediately.",
+        "operationId": "rotate-channel-secret",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rotate a channel's signing secret",
+        "tags": [
+          "channels"
+        ]
+      }
+    },
+    "/api/v1/me/channels/{id}/test": {
+      "post": {
+        "description": "Queues a clearly marked test alert (`\"test\": true`) to the channel. Check `GET /me/channels/deliveries` for the result.",
+        "operationId": "test-channel",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestSentBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Send a test delivery",
+        "tags": [
+          "channels"
         ]
       }
     },
@@ -3298,6 +5091,14 @@
     {
       "description": "Administrator-only: invites, members and the audit log. Every action is audited.",
       "name": "admin"
+    },
+    {
+      "description": "Rules that push the items you cannot afford to miss: templates, custom rules, preview, history. Requires a bearer token.",
+      "name": "alerts"
+    },
+    {
+      "description": "Where alerts are delivered: in-app (built in) and signed outbound webhooks you register.",
+      "name": "channels"
     }
   ]
 }
