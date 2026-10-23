@@ -68,7 +68,10 @@ func (s *Server) hook(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusRequestEntityTooLarge, "too_large", "request body too large (max 64 KB)")
 		return
 	}
-	deny := func() { writeError(w, http.StatusUnauthorized, "unauthorized", "invalid webhook credentials") }
+	deny := func() {
+		s.Metrics.Inc("webhook_deliveries_total", "result", "unauthorized")
+		writeError(w, http.StatusUnauthorized, "unauthorized", "invalid webhook credentials")
+	}
 
 	src, err := s.Sources.GetByName(r.Context(), strings.ToLower(r.PathValue("name")))
 	if err != nil || src.Type != sourcedef.TypeWebhook || !src.Enabled {
@@ -146,6 +149,7 @@ func (s *Server) hook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !inserted {
+		s.Metrics.Inc("webhook_deliveries_total", "result", "duplicate")
 		writeJSONStatus(w, http.StatusOK, map[string]string{"status": "duplicate"})
 		return
 	}
@@ -164,5 +168,6 @@ func (s *Server) hook(w http.ResponseWriter, r *http.Request) {
 	if err := s.Sources.SaveState(r.Context(), src.ID, st); err != nil && !errors.Is(err, sourcedef.ErrNotFound) {
 		s.Log.Warn("webhook state", "err", err)
 	}
+	s.Metrics.Inc("webhook_deliveries_total", "result", "accepted")
 	writeJSONStatus(w, http.StatusCreated, map[string]string{"status": "accepted", "event_id": ev.ID})
 }

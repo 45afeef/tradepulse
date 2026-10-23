@@ -124,7 +124,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
   - [ ] adding email/Telegram later requires no change to matching code
 
 ### TP-020 — Deploy workflow (GitHub Actions → Cloud Run)
-- Status: Proposed · P1 · M6 · Depends: TP-007
+- Status: Review (implemented in 0.8.0-dev; needs a first staging deploy by the owner)
 - Acceptance:
   - [ ] manual-dispatch + tag-based workflow using Workload Identity Federation (no JSON keys)
   - [ ] project/region/service from GitHub variables (`GCP_PROJECT_ID`, `GCP_REGION`, `CLOUD_RUN_SERVICE`), secrets from Secret Manager
@@ -142,3 +142,14 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 ### TP-023 — Alert rules, templates, preview, guardrails, fires history
 - Status: Review (implemented in 0.7.0-dev; not yet confirmed by running) · P0 · M5
 - Acceptance: [x] structured rules (scope/types/conditions/cooldown/severity/channels); [x] shipped + example-domain templates and from-template creation; [x] preview; [x] cooldown, per-user limits, hourly cap with auto-pause and visible reason; [x] explainable fires and history; [x] suspension stops/resumes rules; [ ] owner tries a rule end to end (manual item or webhook) and a signed outbound delivery
+
+### TP-024 — Session hardening (refresh tokens, logout, password change/reset, lockout)
+- Status: Review (implemented in 0.8.0-dev; not yet confirmed by running) · P1 · M6
+- Acceptance: [x] rotating hashed refresh tokens with reuse detection; [x] logout/logout-all; [x] password change and admin reset revoke sessions exactly; [x] per-account lockout with uniform responses; [ ] owner verifies in /docs
+- Deferred: session list/revocation UI (`GET /me/sessions`), per-device names.
+
+### TP-025 — Operator metrics and runbook
+- Status: Review (implemented in 0.8.0-dev) · P0 · M6 · [x] `/metrics`; [x] `docs/RUNBOOK.md` (alerts, playbooks, retention, restore drill); [ ] owner wires alerting in Cloud Monitoring/Prometheus
+
+### TP-026 — Load test and restore drill (owner-run gates before inviting members)
+- Status: Ready · P0 · M6 · [ ] run `deploy/loadtest/k6.js` on staging and record results in `docs/LOADTEST.md`; [ ] perform the restore drill and record it in `docs/RUNBOOK.md`

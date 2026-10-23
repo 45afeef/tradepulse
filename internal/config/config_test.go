@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 func baseEnv(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{"APP_ENV", "DOCS_ENABLED", "SIM_DEMO", "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "DATABASE_URL", "DATABASE_MIGRATION_URL", "DB_MAX_CONNS", "DB_SIMPLE_PROTOCOL", "SOURCE_MIN_INTERVAL_SECONDS", "SOURCE_MAX_INTERVAL_SECONDS", "X_BEARER_TOKEN", "X_API_BASE_URL", "X_MONTHLY_BUDGET_USD", "WEBHOOK_SIGNING_KEY", "WEBHOOK_RATE_PER_MINUTE", "X_COST_PER_RESOURCE_USD", "X_MAX_POSTS_PER_FETCH", "FETCH_USER_AGENT", "ALERT_MAX_FIRES_PER_HOUR", "TRUST_PROXY", "JWT_TTL", "SIM_INTERVAL", "LOG_LEVEL"} {
+	for _, k := range []string{"APP_ENV", "DOCS_ENABLED", "SIM_DEMO", "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "DATABASE_URL", "DATABASE_MIGRATION_URL", "DB_MAX_CONNS", "DB_SIMPLE_PROTOCOL", "SOURCE_MIN_INTERVAL_SECONDS", "SOURCE_MAX_INTERVAL_SECONDS", "X_BEARER_TOKEN", "X_API_BASE_URL", "X_MONTHLY_BUDGET_USD", "WEBHOOK_SIGNING_KEY", "WEBHOOK_RATE_PER_MINUTE", "X_COST_PER_RESOURCE_USD", "X_MAX_POSTS_PER_FETCH", "FETCH_USER_AGENT", "ALERT_MAX_FIRES_PER_HOUR", "REFRESH_TTL", "SHUTDOWN_TIMEOUT", "TRUSTED_PROXY_HOPS", "METRICS_TOKEN", "PORT", "ADDR", "TRUST_PROXY", "JWT_TTL", "SIM_INTERVAL", "LOG_LEVEL"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("JWT_SECRET", strings.Repeat("s", 40))
@@ -201,5 +202,51 @@ func TestAlertSettings(t *testing.T) {
 		if _, err := Load(); err == nil {
 			t.Errorf("ALERT_MAX_FIRES_PER_HOUR=%s accepted", bad)
 		}
+	}
+}
+
+func TestCloudRunAndSessionSettings(t *testing.T) {
+	baseEnv(t)
+	for _, k := range []string{"ADDR", "PORT", "REFRESH_TTL", "SHUTDOWN_TIMEOUT", "TRUSTED_PROXY_HOPS", "METRICS_TOKEN"} {
+		t.Setenv(k, "")
+	}
+	c, err := Load()
+	if err != nil || c.Addr != ":8080" || c.JWTTTL != 15*time.Minute || c.RefreshTTL != 720*time.Hour || c.ShutdownTimeout != 8*time.Second || c.TrustedProxyHops != 1 || c.MetricsToken != "" {
+		t.Fatalf("defaults: %+v %v", c, err)
+	}
+	t.Setenv("PORT", "9090")
+	if c, _ = Load(); c.Addr != ":9090" {
+		t.Fatalf("Cloud Run PORT must be honored: %s", c.Addr)
+	}
+	t.Setenv("ADDR", "127.0.0.1:7000")
+	if c, _ = Load(); c.Addr != "127.0.0.1:7000" {
+		t.Fatalf("ADDR wins over PORT: %s", c.Addr)
+	}
+	t.Setenv("ADDR", "")
+	t.Setenv("PORT", "not-a-port")
+	if c, _ = Load(); c.Addr != ":8080" {
+		t.Fatalf("an invalid PORT must fall back: %s", c.Addr)
+	}
+	for _, bad := range []struct{ k, v string }{
+		{"REFRESH_TTL", "10m"}, {"REFRESH_TTL", "9999h"}, {"REFRESH_TTL", "soon"}, {"SHUTDOWN_TIMEOUT", "100ms"}, {"SHUTDOWN_TIMEOUT", "10m"},
+		{"TRUSTED_PROXY_HOPS", "0"}, {"TRUSTED_PROXY_HOPS", "9"}, {"METRICS_TOKEN", "too-short"},
+	} {
+		baseEnv(t)
+		t.Setenv(bad.k, bad.v)
+		if _, err := Load(); err == nil {
+			t.Errorf("%s=%q accepted", bad.k, bad.v)
+		}
+	}
+}
+
+func TestLogValueRedactsMetricsToken(t *testing.T) {
+	baseEnv(t)
+	t.Setenv("METRICS_TOKEN", "metrics-token-"+strings.Repeat("t", 20))
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out := fmt.Sprintf("%v", c.LogValue()); strings.Contains(out, "metrics-token-") {
+		t.Fatalf("metrics token leaked: %s", out)
 	}
 }

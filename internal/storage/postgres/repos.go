@@ -31,12 +31,12 @@ type UserRepo struct{ db *pgxpool.Pool }
 
 func NewUserRepo(db *pgxpool.Pool) *UserRepo { return &UserRepo{db: db} }
 
-const userCols = `id, email, password_hash, role, status, profile, created_at`
+const userCols = `id, email, password_hash, role, status, profile, created_at, sessions_valid_after`
 
 func scanUser(row scanner) (user.User, error) {
 	var u user.User
 	var prof []byte
-	if err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &prof, &u.CreatedAt); err != nil {
+	if err := row.Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.Status, &prof, &u.CreatedAt, &u.SessionsValidAfter); err != nil {
 		return user.User{}, err
 	}
 	if err := json.Unmarshal(prof, &u.Profile); err != nil {
@@ -102,6 +102,14 @@ func (r *UserRepo) UpdateProfile(ctx context.Context, id string, p user.Profile)
 
 func (r *UserRepo) SetStatus(ctx context.Context, id, status string) error {
 	return r.exec1(ctx, `UPDATE users SET status = $2 WHERE id = $1`, id, status)
+}
+
+func (r *UserRepo) SetPassword(ctx context.Context, id, hash string, validAfter time.Time) error {
+	return r.exec1(ctx, `UPDATE users SET password_hash = $2, sessions_valid_after = $3 WHERE id = $1`, id, hash, validAfter)
+}
+
+func (r *UserRepo) RevokeSessions(ctx context.Context, id string, at time.Time) error {
+	return r.exec1(ctx, `UPDATE users SET sessions_valid_after = $2 WHERE id = $1`, id, at)
 }
 
 func (r *UserRepo) List(ctx context.Context) ([]user.User, error) {

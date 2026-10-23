@@ -6,6 +6,61 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.8.0-dev] — 2026-10-20 — M6: session hardening, operator metrics, Cloud Run deployment, runbook (TP-020, TP-024, TP-025, TP-026)
+**Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox); no new Go dependencies. Run `docker compose run --rm check` (Postgres integration tests included). The deploy workflow and service template cannot be exercised without a GCP project: first staging deploy is an owner gate.
+**Suggested commit message:**
+```
+feat(m6): refresh tokens and session hardening, metrics, Cloud Run deployment and runbook
+
+- rotating hashed refresh tokens with reuse detection; logout, logout-all, password change, admin reset; exact revocation via sessions_valid_after
+- per-account login lockout (uniform responses); access tokens now 15 min (JWT_TTL), refresh 30 days
+- Cloud Run readiness: PORT, SHUTDOWN_TIMEOUT, TRUSTED_PROXY_HOPS; /metrics (METRICS_TOKEN) with curated counters and gauges
+- deploy workflow (WIF, Secret Manager, GitHub environments), Cloud Run service template, CI govulncheck/gosec/Trivy
+- docs: DEPLOY, RUNBOOK (alerts, playbooks, restore drill), LOADTEST + k6 script; migration 0005
+- 27 new tests (21 security)
+```
+
+### Why
+The beta needs sessions that can be ended instantly, protection against credential attacks, a repeatable deployment to Cloud Run, and enough observability to run it (D-039...D-044).
+
+### Added
+- **Sessions:** `POST /auth/refresh` (rotation; reuse revokes the family), `POST /auth/logout` (uniform 204), `POST /me/logout-all`, `POST /me/password` (current password required, other sessions signed out, fresh pair returned), `POST /admin/users/{id}/reset-password` (one-time temporary password, audited). Login/signup responses gain `refresh_token` and `expires_in`.
+- **Exact revocation:** access tokens carry `ian` (issue time in ns); `users.sessions_valid_after` is set by logout-all/password change/reset; tokens issued before it are rejected immediately, tokens issued after work immediately.
+- **Lockout:** 10 failed logins per 15 min lock the account for 15 min (keyed by the submitted email; same response for unknown accounts); password-change attempts are throttled too.
+- **Cloud Run readiness:** `PORT` honored, `SHUTDOWN_TIMEOUT` (default 8 s), `TRUSTED_PROXY_HOPS` for the client IP behind proxies/load balancers, Docker healthcheck follows `PORT`.
+- **Metrics:** `GET /metrics` (404 unless `METRICS_TOKEN`; bearer-protected): HTTP counts/latency, auth failures/lockouts/refresh/reuse, webhook deliveries, alert fires/pauses, outbound deliveries, source runs, WebSocket connections, bus drops, sources by health, X spend/budget.
+- **Deployment:** `.github/workflows/deploy.yaml` (manual dispatch, GitHub environments, Workload Identity Federation, Secret Manager, smoke test), `deploy/cloudrun.service.yaml` (min=max=1, no CPU throttling, 3600 s timeout, probes), CI `scan` job (govulncheck blocking; gosec and Trivy advisory).
+- **Docs:** `docs/DEPLOY.md`, `docs/RUNBOOK.md`, `docs/LOADTEST.md`, `deploy/loadtest/k6.js`.
+- **Storage:** migration `0005_sessions` (`users.sessions_valid_after`, `refresh_tokens` with RLS), Postgres and in-memory repos, hourly pruning of expired refresh tokens.
+- **Tests:** 27 new (see `TESTING.md`).
+
+### Changed (⚠️)
+| Area | Before | After |
+|---|---|---|
+| Access token lifetime (`JWT_TTL`) | 12 h | **15 min** (clients must use the refresh token) |
+| `POST /auth/login`, `/auth/register` response | `token`, `user` | + `refresh_token`, `expires_in` |
+| Password change | none | `POST /me/password` |
+| Client IP behind a proxy | last `X-Forwarded-For` entry | entry `TRUSTED_PROXY_HOPS` from the right (default 1 = same as before) |
+| Shutdown budget | 15 s | `SHUTDOWN_TIMEOUT` (8 s) |
+| `user.Repository` | - | + `SetPassword`, `RevokeSessions` |
+
+### Security notes
+Refresh tokens are 256-bit, stored hashed, single-use; reuse is treated as theft; logout answers uniformly; revocation is exact; lockouts and failures reveal nothing about account existence; metrics are opt-in, token-protected and label-bounded (no user data); deployment uses OIDC (no long-lived keys) and Secret Manager.
+
+### Known limitations / open items
+- Not yet run by the owner; the Cloud Run YAML and workflow are templates verified only by reading (first staging deploy will confirm).
+- Lockouts, rate limiters and tickets are per instance and reset on restart (single-instance design). A targeted lockout of a known email is possible for 15 minutes (documented trade-off).
+- No session list UI/endpoint yet; no email-based password reset (admin reset instead).
+- Privacy compliance remains deferred (D-008); restore drill and load test are owner-run gates.
+
+### Files (main)
+`internal/domain/session/*` · `internal/api/{session,throttle,handlers,authmw,middleware,server}.go` · `internal/metrics/*` · `internal/storage/{memory,postgres}/sessions*` + `migrations/0005_*` · `internal/config/config.go` · `cmd/server/main.go` · `deploy/*` · `.github/workflows/{deploy,ci}.yaml` · `docs/{DEPLOY,RUNBOOK,LOADTEST}.md` · tests
+
+### Next
+Owner gates (check, staging deploy, load test, restore drill) -> invite first members; agent starts M7 (API freeze).
+
+---
+
 ## [0.7.0-dev] — 2026-10-18 — M5: alerts, templates, preview, guardrails, channels (TP-019, TP-023)
 **Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox). No new dependencies. Run `docker compose run --rm check` (Postgres integration tests included).
 **Suggested commit message:**

@@ -50,6 +50,9 @@ Any connector that costs money checks a persistent budget BEFORE each call and r
 ## Alerts and outbound deliveries
 Alert rules are structured data validated against the registry whitelist. Outbound deliveries go only through `alerting.Sender` using `safefetch.Post` (HTTPS channels, signed, no redirects); re-check owner and enabled state before every send; every new guardrail needs a test. See `docs/ALERTS.md`.
 
+## Sessions and operations
+Access tokens are short (15 min); refresh tokens are single-use, hashed, rotated, and reuse revokes the family. Anything that must end sessions sets `users.sessions_valid_after` (exact, via the token's `ian`) and revokes refresh tokens. Metrics must never carry user-controlled label values. Deployment config lives in `deploy/` and `docs/DEPLOY.md`; new env vars go in `.env.example`, the service template and the config tests.
+
 ## API docs rule
 Every endpoint ships with documentation in the Huma registration (summary, description, tag, error codes) and field `doc`/`example` tags; `/docs` is the developer manual. `TestEveryOperationIsDocumented` fails otherwise. Update the overview in `internal/api/docs.go` when behavior visible to API users changes.
 

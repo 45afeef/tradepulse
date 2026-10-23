@@ -82,6 +82,30 @@ func (r *UserRepo) SetStatus(_ context.Context, id, status string) error {
 	return nil
 }
 
+func (r *UserRepo) SetPassword(_ context.Context, id, hash string, validAfter time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	u, ok := r.byID[id]
+	if !ok {
+		return user.ErrNotFound
+	}
+	u.PasswordHash, u.SessionsValidAfter = hash, validAfter
+	r.byID[id] = u
+	return nil
+}
+
+func (r *UserRepo) RevokeSessions(_ context.Context, id string, at time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	u, ok := r.byID[id]
+	if !ok {
+		return user.ErrNotFound
+	}
+	u.SessionsValidAfter = at
+	r.byID[id] = u
+	return nil
+}
+
 func (r *UserRepo) List(_ context.Context) ([]user.User, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

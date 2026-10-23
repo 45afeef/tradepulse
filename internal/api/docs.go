@@ -17,7 +17,8 @@ const overviewRaw = `
 
 ## Authentication
 - Register or log in to get a JWT; send it as §Authorization: Bearer <token>§.
-- Tokens expire (default 12 h); log in again to get a new one.
+- Access tokens are short-lived (15 minutes by default, see §expires_in§). Keep the §refresh_token§ and call §POST /api/v1/auth/refresh§ before expiry: it returns a **new pair** and the old refresh token stops working (reusing an old one revokes the whole session). §POST /api/v1/auth/logout§ ends a session, §POST /api/v1/me/logout-all§ ends all of them, §POST /api/v1/me/password§ changes your password (other sessions are signed out).
+- Repeated failed logins lock the account for a while (the same answer is given whether or not the account exists).
 - A **suspended** account is rejected everywhere immediately and its live connections are closed.
 - Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see §Retry-After§).
 

@@ -64,7 +64,7 @@ func TestWebSocketEndToEnd(t *testing.T) {
 	s, err := New(Deps{
 		Cfg: config.Config{Env: "development", RateRPS: 1000, RateBurst: 1000}, Log: log,
 		Users: memory.NewUserRepo(), Feeds: feeds, Invites: memory.NewInviteRepo(), Audit: memory.NewAuditRepo(100),
-		JWT: jwt, Tickets: auth.NewTicketStore(time.Minute), Personalizer: engine, Hub: hub, Registry: reg,
+		JWT: jwt, Tickets: auth.NewTicketStore(time.Minute), Personalizer: engine, Hub: hub, Registry: reg, Sessions: memory.NewSessionRepo(),
 	})
 	if err != nil {
 		t.Fatal(err)

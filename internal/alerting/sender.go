@@ -12,6 +12,7 @@ import (
 
 	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/idgen"
+	"tradepulse/internal/metrics"
 	"tradepulse/internal/safefetch"
 	"tradepulse/internal/webhook"
 )
@@ -27,6 +28,7 @@ type SenderConfig struct {
 	Delays       []time.Duration // waits before retries (default 2s, 10s, 60s)
 	DisableAfter int             // consecutive failed deliveries before a channel is disabled (default 10)
 	Now          func() time.Time
+	Metrics      *metrics.Registry
 }
 
 type job struct {
@@ -180,6 +182,11 @@ func (s *Sender) deliver(ctx context.Context, j job) {
 		}
 	}
 	d.At = s.cfg.Now().UTC()
+	if d.OK {
+		s.cfg.Metrics.Inc("outbound_deliveries_total", "result", "ok")
+	} else {
+		s.cfg.Metrics.Inc("outbound_deliveries_total", "result", "failed")
+	}
 	_ = s.deliveries.Add(ctx, d)
 	fails, err := s.channels.RecordResult(ctx, ch.ID, d.OK, d.At)
 	if err != nil {

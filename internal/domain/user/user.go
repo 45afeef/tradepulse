@@ -149,6 +149,8 @@ type User struct {
 	Profile      Profile
 	Role         string // RoleAdmin | RoleMember
 	Status       string // StatusActive | StatusSuspended
+	// SessionsValidAfter: access tokens issued before this instant are rejected (logout-all, password change/reset).
+	SessionsValidAfter time.Time
 }
 
 type Repository interface {
@@ -157,5 +159,9 @@ type Repository interface {
 	GetByEmail(ctx context.Context, email string) (User, error)
 	UpdateProfile(ctx context.Context, id string, p Profile) error
 	SetStatus(ctx context.Context, id, status string) error
+	// SetPassword replaces the hash and invalidates tokens issued before validAfter.
+	SetPassword(ctx context.Context, id, hash string, validAfter time.Time) error
+	// RevokeSessions invalidates access tokens issued before at.
+	RevokeSessions(ctx context.Context, id string, at time.Time) error
 	List(ctx context.Context) ([]User, error)
 }

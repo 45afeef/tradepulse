@@ -21,6 +21,7 @@ import (
 	"tradepulse/internal/domain/invite"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
+	"tradepulse/internal/metrics"
 	"tradepulse/internal/infrastructure/eventbus"
 	"tradepulse/internal/safefetch"
 	"tradepulse/internal/storage/memory"
@@ -40,7 +41,7 @@ func newServer(t *testing.T, mutate func(*config.Config)) (*Server, http.Handler
 	cfg := config.Config{Env: "development", DocsEnabled: true, RateRPS: 1000, RateBurst: 1000,
 		SourceMinInterval: 60 * time.Second, SourceMaxInterval: 24 * time.Hour,
 		WebhookSigningKey: strings.Repeat("w", 40), WebhookRatePerMinute: 600,
-		XBearerToken: "test-x-token", XMonthlyBudgetUSD: 1, XCostPerResourceUSD: 0.005, XMaxPostsPerFetch: 20, AllowedOrigins: []string{"http://allowed.example"}}
+		RefreshTTL: 24 * time.Hour, XBearerToken: "test-x-token", XMonthlyBudgetUSD: 1, XCostPerResourceUSD: 0.005, XMaxPostsPerFetch: 20, AllowedOrigins: []string{"http://allowed.example"}}
 	if mutate != nil {
 		mutate(&cfg)
 	}
@@ -71,7 +72,7 @@ func newServer(t *testing.T, mutate func(*config.Config)) (*Server, http.Handler
 		Connectors: connector.NewRegistry(conns...), Items: memory.NewItemStore(), Usage: usage,
 		Tickets: auth.NewTicketStore(time.Minute), Personalizer: nopPersonalizer{},
 		Hub: hub, Registry: reg, Alerts: engine, AlertRules: aRules, AlertFires: aFires, Channels: chans, Deliveries: dels,
-		Templates: alert.NewTemplates(), Outbound: out,
+		Templates: alert.NewTemplates(), Outbound: out, Sessions: memory.NewSessionRepo(), Metrics: metrics.New(),
 	})
 	if err != nil {
 		t.Fatal(err)

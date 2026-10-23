@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"tradepulse/internal/domain/alert"
+	"tradepulse/internal/domain/session"
 )
 
 // ---- rules ----
@@ -299,5 +300,85 @@ func (r *DeliveryRepo) Prune(_ context.Context, olderThan time.Time) (int64, err
 	}
 	n := int64(len(r.ds) - len(kept))
 	r.ds = kept
+	return n, nil
+}
+
+// ---- refresh tokens ----
+
+type SessionRepo struct {
+	mu sync.Mutex
+	m  map[string]session.Token // by hash
+}
+
+func NewSessionRepo() *SessionRepo { return &SessionRepo{m: map[string]session.Token{}} }
+
+func (r *SessionRepo) Create(_ context.Context, t session.Token) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.m[t.Hash] = t
+	return nil
+}
+
+func (r *SessionRepo) Rotate(_ context.Context, hash string, now time.Time) (session.Token, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.m[hash]
+	if !ok {
+		return session.Token{}, session.ErrInvalid
+	}
+	switch {
+	case t.UsedAt != nil:
+		return t, session.ErrReused
+	case t.RevokedAt != nil || !now.Before(t.ExpiresAt):
+		return session.Token{}, session.ErrInvalid
+	}
+	t.UsedAt = &now
+	r.m[hash] = t
+	return t, nil
+}
+
+func (r *SessionRepo) FamilyOf(_ context.Context, hash string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.m[hash]
+	if !ok {
+		return "", session.ErrInvalid
+	}
+	return t.FamilyID, nil
+}
+
+func (r *SessionRepo) revoke(match func(session.Token) bool, now time.Time) {
+	for h, t := range r.m {
+		if match(t) && t.RevokedAt == nil {
+			t.RevokedAt = &now
+			r.m[h] = t
+		}
+	}
+}
+
+func (r *SessionRepo) RevokeFamily(_ context.Context, familyID string, now time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.revoke(func(t session.Token) bool { return t.FamilyID == familyID }, now)
+	return nil
+}
+
+func (r *SessionRepo) RevokeUser(_ context.Context, userID string, now time.Time) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.revoke(func(t session.Token) bool { return t.UserID == userID }, now)
+	return nil
+}
+
+func (r *SessionRepo) Prune(_ context.Context, before time.Time) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var n int64
+	for h, t := range r.m {
+		if t.ExpiresAt.Before(before) {
+			delete(r.m, h)
+			n++
+		}
+	}
 	return n, nil
 }

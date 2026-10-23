@@ -44,6 +44,11 @@ type Config struct {
 	WebhookRatePerMinute  int
 	AlertMaxFiresPerHour  int // a rule firing more often is auto-paused
 
+	RefreshTTL       time.Duration // refresh token lifetime
+	ShutdownTimeout  time.Duration // graceful shutdown budget (Cloud Run gives 10 s after SIGTERM)
+	TrustedProxyHops int           // proxies in front of the app when TRUST_PROXY=true (client = Nth from the right of X-Forwarded-For)
+	MetricsToken     string        // enables GET /metrics (bearer); empty disables it
+
 	// Optional first-admin bootstrap (idempotent; remove from env after first start).
 	BootstrapAdminEmail    string
 	BootstrapAdminPassword string
@@ -56,7 +61,7 @@ type Config struct {
 func Load() (Config, error) {
 	c := Config{
 		Env:          get("APP_ENV", "development"),
-		Addr:         get("ADDR", ":8080"),
+		Addr:         defaultAddr(),
 		JWTSecret:    os.Getenv("JWT_SECRET"),
 		MaxWSPerUser: 5,
 	}
@@ -64,7 +69,7 @@ func Load() (Config, error) {
 	if len(c.JWTSecret) < 32 {
 		return c, errors.New("JWT_SECRET is required and must be at least 32 characters")
 	}
-	if c.JWTTTL, err = time.ParseDuration(get("JWT_TTL", "12h")); err != nil {
+	if c.JWTTTL, err = time.ParseDuration(get("JWT_TTL", "15m")); err != nil {
 		return c, fmt.Errorf("JWT_TTL: %w", err)
 	}
 	if c.SimInterval, err = time.ParseDuration(get("SIM_INTERVAL", "2s")); err != nil || c.SimInterval < 100*time.Millisecond {
@@ -150,6 +155,19 @@ func Load() (Config, error) {
 	if c.AlertMaxFiresPerHour, err = strconv.Atoi(get("ALERT_MAX_FIRES_PER_HOUR", "30")); err != nil || c.AlertMaxFiresPerHour < 1 || c.AlertMaxFiresPerHour > 1000 {
 		return c, errors.New("ALERT_MAX_FIRES_PER_HOUR must be an integer 1-1000")
 	}
+	if c.RefreshTTL, err = time.ParseDuration(get("REFRESH_TTL", "720h")); err != nil || c.RefreshTTL < time.Hour || c.RefreshTTL > 90*24*time.Hour {
+		return c, errors.New("REFRESH_TTL must be a duration between 1h and 2160h")
+	}
+	if c.ShutdownTimeout, err = time.ParseDuration(get("SHUTDOWN_TIMEOUT", "8s")); err != nil || c.ShutdownTimeout < time.Second || c.ShutdownTimeout > time.Minute {
+		return c, errors.New("SHUTDOWN_TIMEOUT must be a duration between 1s and 60s")
+	}
+	if c.TrustedProxyHops, err = strconv.Atoi(get("TRUSTED_PROXY_HOPS", "1")); err != nil || c.TrustedProxyHops < 1 || c.TrustedProxyHops > 5 {
+		return c, errors.New("TRUSTED_PROXY_HOPS must be an integer 1-5")
+	}
+	c.MetricsToken = os.Getenv("METRICS_TOKEN")
+	if c.MetricsToken != "" && len(c.MetricsToken) < 24 {
+		return c, errors.New("METRICS_TOKEN must be at least 24 characters")
+	}
 	return c, nil
 }
 
@@ -158,8 +176,19 @@ func (c Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("env", c.Env), slog.String("addr", c.Addr), slog.Bool("docs", c.DocsEnabled),
 		slog.String("demo", c.SimDemo), slog.Bool("database", c.DatabaseURL != ""),
-		slog.Bool("x_configured", c.XBearerToken != ""), slog.Bool("webhooks", c.WebhookSigningKey != ""), slog.Float64("x_budget_usd", c.XMonthlyBudgetUSD),
+		slog.Bool("x_configured", c.XBearerToken != ""), slog.Bool("webhooks", c.WebhookSigningKey != ""), slog.Bool("metrics", c.MetricsToken != ""), slog.Float64("x_budget_usd", c.XMonthlyBudgetUSD),
 	)
+}
+
+// defaultAddr: ADDR wins; otherwise Cloud Run's PORT; otherwise :8080.
+func defaultAddr() string {
+	if a := os.Getenv("ADDR"); a != "" {
+		return a
+	}
+	if p, err := strconv.Atoi(os.Getenv("PORT")); err == nil && p > 0 && p < 65536 {
+		return ":" + strconv.Itoa(p)
+	}
+	return ":8080"
 }
 
 func (c Config) Production() bool { return c.Env == "production" }

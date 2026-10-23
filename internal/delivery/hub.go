@@ -106,6 +106,17 @@ func (h *Hub) Shutdown() {
 	}
 }
 
+// Count returns the number of live WebSocket connections (for metrics).
+func (h *Hub) Count() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	n := 0
+	for _, set := range h.clients {
+		n += len(set)
+	}
+	return n
+}
+
 // DisconnectUser closes every live connection of a user (e.g. on suspension).
 func (h *Hub) DisconnectUser(userID string) {
 	h.mu.RLock()

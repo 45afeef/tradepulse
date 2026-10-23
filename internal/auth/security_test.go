@@ -98,3 +98,18 @@ func TestTicketExpiresAndIsUnguessable(t *testing.T) {
 		t.Fatal("unknown ticket accepted")
 	}
 }
+
+func TestAccessTokensCarryNanosecondIssueTime(t *testing.T) {
+	j := newJWT(t, strings.Repeat("a", 32), "iss")
+	a, _ := j.Issue("u")
+	time.Sleep(time.Millisecond)
+	b, _ := j.Issue("u")
+	ca, _ := j.Verify(a)
+	cb, _ := j.Verify(b)
+	if ca.Ian == 0 || cb.Ian <= ca.Ian {
+		t.Fatalf("tokens issued at different instants must be ordered exactly: %d %d", ca.Ian, cb.Ian)
+	}
+	if j.TTL() != time.Minute {
+		t.Fatalf("TTL accessor: %v", j.TTL())
+	}
+}

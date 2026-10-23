@@ -1,0 +1,76 @@
+# Cloud Run service template (Knative format). The deploy workflow fills ${...} with envsubst and runs
+#   gcloud run services replace service.yaml --region ... --project ...
+# Settings that matter (see docs/DEPLOY.md):
+#   minScale=maxScale=1 + cpu-throttling=false: pollers, alerts and WebSockets run outside requests and keep
+#   in-memory state (single instance until Redis/PubSub fan-out exists).
+#   timeoutSeconds=3600: WebSocket connections last up to 60 minutes; clients reconnect and catch up.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: ${CLOUD_RUN_SERVICE}
+  labels:
+    cloud.googleapis.com/location: ${GCP_REGION}
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "1"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      serviceAccountName: ${GCP_RUNTIME_SERVICE_ACCOUNT}
+      containerConcurrency: 250
+      timeoutSeconds: 3600
+      containers:
+        - image: ${IMAGE}
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            periodSeconds: 3
+            timeoutSeconds: 3
+            failureThreshold: 20
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 30
+            timeoutSeconds: 3
+          env:
+            - name: APP_ENV
+              value: production
+            - name: DOCS_ENABLED
+              value: "false"
+            - name: SIM_DEMO
+              value: none
+            - name: TRUST_PROXY
+              value: "true"
+            - name: TRUSTED_PROXY_HOPS
+              value: "${TRUSTED_PROXY_HOPS}"
+            - name: ALLOWED_ORIGINS
+              value: "${ALLOWED_ORIGINS}"
+            - name: LOG_LEVEL
+              value: info
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: tradepulse-${ENVIRONMENT}-jwt-secret
+                  key: latest
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: tradepulse-${ENVIRONMENT}-database-url
+                  key: latest
+${OPTIONAL_ENV}
+  traffic:
+    - percent: 100
+      latestRevision: true

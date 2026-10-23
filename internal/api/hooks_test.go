@@ -115,16 +115,16 @@ func TestWebhookRejectsBadCredentialsIdentically(t *testing.T) {
 	body := `{"title":"x"}`
 	good := signed(secret, body, time.Now())
 	cases := map[string]*httptest.ResponseRecorder{
-		"wrong signature":   postHook(h, "strict-hook", body, map[string]string{"X-TP-Timestamp": good["X-TP-Timestamp"], "X-TP-Signature": "sha256=" + strings.Repeat("0", 64)}),
-		"stale timestamp":   postHook(h, "strict-hook", body, signed(secret, body, time.Now().Add(-10*time.Minute))),
-		"future timestamp":  postHook(h, "strict-hook", body, signed(secret, body, time.Now().Add(10*time.Minute))),
-		"no headers":        postHook(h, "strict-hook", body, nil),
-		"signed other body": postHook(h, "strict-hook", `{"title":"y"}`, good),
-		"token to hmac":     postHook(h, "strict-hook", body, map[string]string{"X-Webhook-Token": secret}),
-		"bearer to hmac":    postHook(h, "strict-hook", body, map[string]string{"Authorization": "Bearer " + secret}),
-		"unknown source":    postHook(h, "no-such-hook", body, good),
-		"disabled source":   postHook(h, "off-hook", body, good),
-		"wrong secret":      postHook(h, "strict-hook", body, signed("whsec_wrong", body, time.Now())),
+		"wrong signature":     postHook(h, "strict-hook", body, map[string]string{"X-TP-Timestamp": good["X-TP-Timestamp"], "X-TP-Signature": "sha256=" + strings.Repeat("0", 64)}),
+		"stale timestamp":     postHook(h, "strict-hook", body, signed(secret, body, time.Now().Add(-10*time.Minute))),
+		"future timestamp":    postHook(h, "strict-hook", body, signed(secret, body, time.Now().Add(10*time.Minute))),
+		"no headers":          postHook(h, "strict-hook", body, nil),
+		"signed other body":   postHook(h, "strict-hook", `{"title":"y"}`, good),
+		"token to hmac":       postHook(h, "strict-hook", body, map[string]string{"X-Webhook-Token": secret}),
+		"bearer to hmac":      postHook(h, "strict-hook", body, map[string]string{"Authorization": "Bearer " + secret}),
+		"unknown source":      postHook(h, "no-such-hook", body, good),
+		"disabled source":     postHook(h, "off-hook", body, good),
+		"wrong secret":        postHook(h, "strict-hook", body, signed("whsec_wrong", body, time.Now())),
 	}
 	var first string
 	for name, rec := range cases {

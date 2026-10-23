@@ -19,6 +19,7 @@ type Claims struct {
 	Iss string `json:"iss"`
 	Iat int64  `json:"iat"`
 	Exp int64  `json:"exp"`
+	Ian int64  `json:"ian,omitempty"` // issue time in nanoseconds: exact ordering against session revocation
 }
 
 type JWT struct {
@@ -40,6 +41,9 @@ func NewJWT(secret, issuer string, ttl time.Duration) (*JWT, error) {
 	return &JWT{secret: []byte(secret), issuer: issuer, ttl: ttl, now: time.Now}, nil
 }
 
+// TTL is the access token lifetime.
+func (j *JWT) TTL() time.Duration { return j.ttl }
+
 func (j *JWT) sign(s string) []byte {
 	m := hmac.New(sha256.New, j.secret)
 	m.Write([]byte(s))
@@ -48,7 +52,7 @@ func (j *JWT) sign(s string) []byte {
 
 func (j *JWT) Issue(sub string) (string, error) {
 	now := j.now()
-	b, err := json.Marshal(Claims{Sub: sub, Iss: j.issuer, Iat: now.Unix(), Exp: now.Add(j.ttl).Unix()})
+	b, err := json.Marshal(Claims{Sub: sub, Iss: j.issuer, Iat: now.Unix(), Ian: now.UnixNano(), Exp: now.Add(j.ttl).Unix()})
 	if err != nil {
 		return "", err
 	}

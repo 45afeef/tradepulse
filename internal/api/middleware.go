@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net"
 	"net/http"
@@ -59,6 +60,8 @@ func (s *Server) logging(next http.Handler) http.Handler {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
+		s.Metrics.Inc("http_requests_total", "class", fmt.Sprintf("%dxx", rec.status/100))
+		s.Metrics.Observe("http_request_duration_seconds", time.Since(start).Seconds())
 		id, _ := r.Context().Value(reqIDKey).(string)
 		// r.URL.Path only: query strings can carry tickets.
 		s.Log.Info("request", "id", id, "method", r.Method, "path", r.URL.Path,
@@ -108,7 +111,15 @@ func (s *Server) clientIP(r *http.Request) string {
 		// Use the entry appended by our own trusted proxy (the last one).
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			parts := strings.Split(xff, ",")
-			return strings.TrimSpace(parts[len(parts)-1])
+			hops := s.Cfg.TrustedProxyHops
+			if hops < 1 {
+				hops = 1
+			}
+			i := len(parts) - hops // the entry added by the first trusted proxy; anything left of it is client-controlled
+			if i < 0 {
+				i = 0
+			}
+			return strings.TrimSpace(parts[i])
 		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)

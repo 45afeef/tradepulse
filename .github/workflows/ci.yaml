@@ -26,3 +26,28 @@ jobs:
         run: |
           go run ./cmd/openapi > /tmp/openapi.json
           diff -u openapi.json /tmp/openapi.json
+
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: govulncheck (known vulnerabilities in dependencies that the code actually reaches)
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      - name: gosec (static security analysis; advisory until the first clean baseline)
+        uses: securego/gosec@master
+        continue-on-error: true
+        with:
+          args: -no-fail ./...
+      - name: Build image
+        run: docker build -t tradepulse:ci .
+      - name: Trivy image scan (advisory)
+        uses: aquasecurity/trivy-action@master
+        continue-on-error: true
+        with:
+          image-ref: tradepulse:ci
+          severity: HIGH,CRITICAL
+          exit-code: "0"

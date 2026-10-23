@@ -1,0 +1,80 @@
+name: deploy
+# Manual deploy to Cloud Run (staging or production). Production should require reviewers via the
+# GitHub "production" environment. Authentication uses Workload Identity Federation: no JSON keys.
+# Setup, variables and secrets: docs/DEPLOY.md
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options: [staging, production]
+        default: staging
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      ENVIRONMENT: ${{ inputs.environment }}
+      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      GCP_REGION: ${{ vars.GCP_REGION }}
+      CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      GCP_RUNTIME_SERVICE_ACCOUNT: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
+      ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+      TRUSTED_PROXY_HOPS: ${{ vars.TRUSTED_PROXY_HOPS || '1' }}
+      IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_ARTIFACT_REPO }}/tradepulse:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version-file: go.mod }
+      - name: Build check
+        run: go build ./...
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Build and push image
+        run: |
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+      - name: Render service definition
+        run: |
+          # Optional secrets are wired only if they exist in Secret Manager.
+          OPT=""
+          for pair in DATABASE_MIGRATION_URL:database-migration-url WEBHOOK_SIGNING_KEY:webhook-signing-key X_BEARER_TOKEN:x-bearer-token \
+                      METRICS_TOKEN:metrics-token BOOTSTRAP_ADMIN_EMAIL:bootstrap-admin-email BOOTSTRAP_ADMIN_PASSWORD:bootstrap-admin-password; do
+            var="${pair%%:*}"; name="${pair##*:}"; secret="tradepulse-${ENVIRONMENT}-${name}"
+            if gcloud secrets describe "$secret" --project "$GCP_PROJECT_ID" >/dev/null 2>&1; then
+              OPT="${OPT}            - name: ${var}\n              valueFrom:\n                secretKeyRef:\n                  name: ${secret}\n                  key: latest\n"
+            fi
+          done
+          export OPTIONAL_ENV="$(printf "$OPT")"
+          envsubst < deploy/cloudrun.service.yaml > /tmp/service.yaml
+          cat /tmp/service.yaml
+      - name: Deploy
+        run: gcloud run services replace /tmp/service.yaml --region "$GCP_REGION" --project "$GCP_PROJECT_ID"
+      - name: Allow public invocation (the API is public; access control is in the app)
+        run: |
+          gcloud run services add-iam-policy-binding "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" \
+            --member=allUsers --role=roles/run.invoker >/dev/null
+      - name: Smoke test
+        run: |
+          URL="$(gcloud run services describe "$CLOUD_RUN_SERVICE" --region "$GCP_REGION" --project "$GCP_PROJECT_ID" --format='value(status.url)')"
+          echo "Service URL: $URL"
+          for i in $(seq 1 20); do
+            if curl -fsS "$URL/readyz" >/dev/null; then echo "ready"; curl -fsS "$URL/healthz"; exit 0; fi
+            sleep 5
+          done
+          echo "Service did not become ready. Roll back with: gcloud run services update-traffic $CLOUD_RUN_SERVICE --region $GCP_REGION --to-revisions=<previous-revision>=100"
+          exit 1

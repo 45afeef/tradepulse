@@ -14,6 +14,7 @@ import (
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/rule"
 	"tradepulse/internal/idgen"
+	"tradepulse/internal/metrics"
 )
 
 // Notifier pushes a live message to a user's connections (delivery.Hub).
@@ -37,6 +38,7 @@ type Config struct {
 	MaxFiresPerHour int // auto-pause threshold (default 30)
 	Now             func() time.Time
 	RingSize        int // recent events kept for previews (default 1000)
+	Metrics         *metrics.Registry
 }
 
 type Engine struct {
@@ -322,6 +324,7 @@ func (e *Engine) fire(ctx context.Context, c *compiled, ev event.Event, title, b
 		Title: title, Body: body, URL: ev.URL, Source: ev.Source, Entities: ev.Entities, FiredAt: now.UTC(),
 		Reason: fmt.Sprintf("Matched your alert %q (%s: %s)%s", c.r.Spec.Name, c.r.Spec.Scope.Kind, strings.Join(c.r.Spec.Scope.Values, ", "), condNote(c.r.Spec.Conditions)),
 	}
+	e.cfg.Metrics.Inc("alert_fires_total", "severity", c.r.Spec.Severity)
 	if err := e.fires.Add(ctx, f); err != nil {
 		e.log.Error("persist alert fire", "err", err)
 	}
@@ -349,6 +352,7 @@ func (e *Engine) pause(ctx context.Context, c *compiled, reason string) {
 		e.log.Error("pause rule", "err", err)
 	}
 	e.RemoveRule(c.r.ID)
+	e.cfg.Metrics.Inc("alert_rules_auto_paused_total")
 	e.log.Warn("alert rule auto-paused", "rule", c.r.ID)
 	e.out.Notify(ctx, c.r.UserID, "alert_paused", map[string]string{"rule_id": c.r.ID, "name": c.r.Spec.Name, "reason": reason})
 }

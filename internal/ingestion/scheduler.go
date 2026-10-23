@@ -12,6 +12,7 @@ import (
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/sourcedef"
 	"tradepulse/internal/idgen"
+	"tradepulse/internal/metrics"
 )
 
 type SchedulerConfig struct {
@@ -24,6 +25,7 @@ type SchedulerConfig struct {
 	FailureRetry  time.Duration // first retry delay after a failure, doubled each time (default 30s)
 	Bounds        sourcedef.Bounds
 	Now           func() time.Time
+	Metrics       *metrics.Registry
 	jitterDisable bool
 }
 
@@ -297,6 +299,7 @@ func (s *Scheduler) RunOnce(ctx context.Context, src sourcedef.Source) {
 	}
 	next := now.Add(s.jitter(NextInterval(time.Duration(src.IntervalSeconds)*time.Second, st.UnchangedStreak, s.cfg.Bounds.Max)))
 	st.NextRunAt = &next
+	s.cfg.Metrics.Inc("source_runs_total", "result", "ok")
 	run.OK, run.DurationMS = true, int(s.cfg.Now().Sub(started).Milliseconds())
 	s.save(ctx, src, st, run)
 }
@@ -309,6 +312,7 @@ func (s *Scheduler) finishFailure(ctx context.Context, src sourcedef.Source, run
 	st.ConsecutiveFailures++
 	next := now.Add(s.jitter(FailureDelay(time.Duration(src.IntervalSeconds)*time.Second, st.ConsecutiveFailures, s.cfg.FailureRetry, s.cfg.Bounds.Min)))
 	st.NextRunAt = &next
+	s.cfg.Metrics.Inc("source_runs_total", "result", "failed")
 	run.OK, run.HTTPStatus, run.Error = false, status, st.LastError
 	run.DurationMS = int(now.Sub(started).Milliseconds())
 	s.save(ctx, src, st, run)

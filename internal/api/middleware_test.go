@@ -62,3 +62,15 @@ func TestBodyLimitMiddleware(t *testing.T) {
 		t.Fatal("2 MB body was not rejected")
 	}
 }
+
+func TestClientIPHonorsTrustedProxyHops(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.1:1"
+	req.Header.Set("X-Forwarded-For", "9.9.9.9, 1.1.1.1, 2.2.2.2")
+	for hops, want := range map[int]string{0: "2.2.2.2", 1: "2.2.2.2", 2: "1.1.1.1", 3: "9.9.9.9", 5: "9.9.9.9"} {
+		s := &Server{Deps: Deps{Cfg: config.Config{TrustProxy: true, TrustedProxyHops: hops}}}
+		if got := s.clientIP(req); got != want {
+			t.Errorf("hops=%d: got %s want %s (entries left of the trusted proxies are client-controlled)", hops, got, want)
+		}
+	}
+}

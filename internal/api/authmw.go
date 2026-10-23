@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -27,6 +28,14 @@ func (s *Server) authMiddleware(api huma.API, adminOnly bool) func(huma.Context,
 		}
 		u, err := s.Users.GetByID(ctx.Context(), claims.Sub)
 		if err != nil || u.Status != user.StatusActive {
+			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "invalid or expired token")
+			return
+		}
+		issued := time.Unix(claims.Iat, 0)
+		if claims.Ian != 0 {
+			issued = time.Unix(0, claims.Ian)
+		}
+		if issued.Before(u.SessionsValidAfter) { // logged out everywhere / password changed or reset
 			_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}

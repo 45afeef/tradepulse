@@ -7,22 +7,25 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 
 	"tradepulse/internal/auth"
-	"tradepulse/internal/config"
 	"tradepulse/internal/connector"
+	"tradepulse/internal/config"
 	"tradepulse/internal/delivery"
 	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/audit"
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/feed"
 	"tradepulse/internal/domain/invite"
+	"tradepulse/internal/domain/session"
 	"tradepulse/internal/domain/sourcedef"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
+	"tradepulse/internal/metrics"
 )
 
 // Personalizer keeps the matching engine in sync with account changes.
@@ -55,6 +58,8 @@ type Deps struct {
 	Deliveries   alert.DeliveryRepository
 	Templates    *alert.Templates
 	Outbound     Outbound
+	Sessions     session.Repository
+	Metrics      *metrics.Registry
 	Usage        sourcedef.UsageStore
 	// Ready (optional) checks dependencies for /readyz, e.g. the database ping.
 	Ready func(ctx context.Context) error
@@ -65,6 +70,7 @@ type Server struct {
 	global    *limiter
 	authLim   *limiter
 	dummyHash string
+	throttle  *throttle
 	hookMu    sync.Mutex
 	hookLims  map[string]*limiter
 }
@@ -79,6 +85,7 @@ func New(d Deps) (*Server, error) {
 		global:    newLimiter(d.Cfg.RateRPS, d.Cfg.RateBurst),
 		authLim:   newLimiter(0.2, 5), // ~12 attempts/min per IP, burst 5
 		dummyHash: dummy,
+		throttle:  newThrottle(10, 15*time.Minute, 15*time.Minute),
 	}, nil
 }
 
@@ -86,6 +93,7 @@ func New(d Deps) (*Server, error) {
 func (s *Server) Run(ctx context.Context) {
 	go s.global.sweep(ctx)
 	go s.authLim.sweep(ctx)
+	go s.throttle.sweep(ctx)
 	<-ctx.Done()
 }
 
@@ -199,14 +207,14 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 	huma.Register(api, huma.Operation{OperationID: "update-source", Method: http.MethodPut, Path: "/api/v1/admin/sources/{id}", Tags: []string{"admin"},
 		Summary: "Update a source's settings", Security: secured, Middlewares: admin, MaxBodyBytes: small,
 		Description: "Replaces url, enabled, interval_seconds, entities and web settings. Name and type cannot change. Same validation as creation.",
-		Errors:      []int{401, 403, 404, 422}}, s.updateSource)
+		Errors: []int{401, 403, 404, 422}}, s.updateSource)
 	huma.Register(api, huma.Operation{OperationID: "delete-source", Method: http.MethodDelete, Path: "/api/v1/admin/sources/{id}", Tags: []string{"admin"},
 		Summary: "Delete a source", Security: secured, Middlewares: admin, DefaultStatus: http.StatusNoContent,
 		Description: "Removes the source, its run history and stored items. Members' subscriptions to it simply stop matching.", Errors: []int{401, 403, 404}}, s.deleteSource)
 	huma.Register(api, huma.Operation{OperationID: "run-source-now", Method: http.MethodPost, Path: "/api/v1/admin/sources/{id}/run", Tags: []string{"admin"},
 		Summary: "Fetch a source as soon as possible", Security: secured, Middlewares: admin,
 		Description: "Schedules the next fetch immediately (the scheduler picks it up within seconds). Only for enabled rss/webmonitor sources.",
-		Errors:      []int{401, 403, 404, 409}}, s.runSourceNow)
+		Errors: []int{401, 403, 404, 409}}, s.runSourceNow)
 	huma.Register(api, huma.Operation{OperationID: "test-source", Method: http.MethodPost, Path: "/api/v1/admin/sources/test", Tags: []string{"admin"},
 		Summary: "Test a source draft without saving", Security: secured, Middlewares: admin, MaxBodyBytes: small,
 		Description: "Fetches the URL with the given settings and returns the first items it would extract (nothing is stored or published). " +
@@ -215,15 +223,15 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 	huma.Register(api, huma.Operation{OperationID: "post-item", Method: http.MethodPost, Path: "/api/v1/admin/items", Tags: []string{"admin"},
 		Summary: "Publish a manual item", Security: secured, Middlewares: admin, DefaultStatus: http.StatusCreated, MaxBodyBytes: small,
 		Description: "Publishes one item through an enabled `manual` source; matching members receive it live. Useful for announcements and corrections.",
-		Errors:      []int{401, 403, 404, 409, 422}}, s.postItem)
+		Errors: []int{401, 403, 404, 409, 422}}, s.postItem)
 	huma.Register(api, huma.Operation{OperationID: "rotate-webhook-secret", Method: http.MethodPost, Path: "/api/v1/admin/sources/{id}/webhook-secret", Tags: []string{"admin"},
 		Summary: "Rotate a webhook source's secret", Security: secured, Middlewares: admin,
 		Description: "Generates a new secret and returns it **once**; the old secret stops working immediately. Only for `webhook` sources.",
-		Errors:      []int{401, 403, 404, 409, 422}}, s.rotateWebhookSecret)
+		Errors: []int{401, 403, 404, 409, 422}}, s.rotateWebhookSecret)
 	huma.Register(api, huma.Operation{OperationID: "get-usage", Method: http.MethodGet, Path: "/api/v1/admin/usage", Tags: []string{"admin"},
 		Summary: "Paid API usage this month", Security: secured, Middlewares: admin,
 		Description: "X API spend for the current month against the configured cap (X_MONTHLY_BUDGET_USD). Polling stops automatically when the cap is reached.",
-		Errors:      []int{401, 403}}, s.getUsage)
+		Errors: []int{401, 403}}, s.getUsage)
 	huma.Register(api, huma.Operation{OperationID: "list-alert-templates", Method: http.MethodGet, Path: "/api/v1/alert-templates", Tags: []string{"alerts"},
 		Summary: "Alert templates", Security: secured, Middlewares: member,
 		Description: "Shipped, pre-filled rules. Use one with *Create an alert from a template* (you only supply the values to watch), or copy its settings into a custom rule.", Errors: []int{401}}, s.listTemplates)
@@ -275,14 +283,32 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 	huma.Register(api, huma.Operation{OperationID: "test-channel", Method: http.MethodPost, Path: "/api/v1/me/channels/{id}/test", Tags: []string{"channels"},
 		Summary: "Send a test delivery", Security: secured, Middlewares: member,
 		Description: "Queues a clearly marked test alert (`\"test\": true`) to the channel. Check `GET /me/channels/deliveries` for the result.", Errors: []int{401, 404, 409}}, s.testChannel)
+	huma.Register(api, huma.Operation{OperationID: "refresh", Method: http.MethodPost, Path: "/api/v1/auth/refresh", Tags: []string{"auth"},
+		Summary: "Exchange a refresh token for a new token pair", MaxBodyBytes: small,
+		Description: "Access tokens are short-lived (see `expires_in`). Send the refresh token you received at login to get a new access token **and a new refresh token**; the old refresh token stops working. " +
+			"Presenting an already-used refresh token is treated as theft: the whole session is revoked and you must log in again. Refresh tokens last 30 days by default.", Errors: []int{401, 429}}, s.refresh)
+	huma.Register(api, huma.Operation{OperationID: "logout", Method: http.MethodPost, Path: "/api/v1/auth/logout", Tags: []string{"auth"},
+		Summary: "Log out (revoke this session)", MaxBodyBytes: small, DefaultStatus: http.StatusNoContent,
+		Description: "Revokes the session the refresh token belongs to. Always answers 204, whether or not the token was valid.", Errors: []int{429}}, s.logout)
+	huma.Register(api, huma.Operation{OperationID: "logout-all", Method: http.MethodPost, Path: "/api/v1/me/logout-all", Tags: []string{"me"},
+		Summary: "Log out everywhere", Security: secured, Middlewares: member, DefaultStatus: http.StatusNoContent,
+		Description: "Revokes every refresh token and invalidates every access token issued before now (including the one you used).", Errors: []int{401}}, s.logoutAll)
+	huma.Register(api, huma.Operation{OperationID: "change-password", Method: http.MethodPost, Path: "/api/v1/me/password", Tags: []string{"me"},
+		Summary: "Change my password", Security: secured, Middlewares: member, MaxBodyBytes: small,
+		Description: "Requires the current password. All other sessions are signed out; the response contains a fresh token pair for this one. Repeated wrong current passwords are throttled.",
+		Errors: []int{401, 403, 422, 429}}, s.changePassword)
+	huma.Register(api, huma.Operation{OperationID: "reset-user-password", Method: http.MethodPost, Path: "/api/v1/admin/users/{id}/reset-password", Tags: []string{"admin"},
+		Summary: "Reset a member's password", Security: secured, Middlewares: admin,
+		Description: "Generates a temporary password, **shown once** in the response; the member's sessions are signed out immediately. Hand it over securely and ask the member to change it (`POST /me/password`).", Errors: []int{401, 403, 404}}, s.resetPassword)
 	return api
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.routes(mux)
-	mux.HandleFunc("GET /ws", s.ws)                     // WebSocket: plain handler, outside OpenAPI
-	mux.HandleFunc("POST /api/v1/hooks/{name}", s.hook) // inbound webhook: signs the raw body, documented in the overview
+	mux.HandleFunc("GET /metrics", s.metricsHandler) // Prometheus text; 404 unless METRICS_TOKEN is set
+	mux.HandleFunc("GET /ws", s.ws)                            // WebSocket: plain handler, outside OpenAPI
+	mux.HandleFunc("POST /api/v1/hooks/{name}", s.hook)       // inbound webhook: signs the raw body, documented in the overview
 
 	var h http.Handler = mux
 	h = bodyLimit(h)

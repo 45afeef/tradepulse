@@ -26,11 +26,13 @@ import (
 	"tradepulse/internal/domain/audit"
 	"tradepulse/internal/domain/feed"
 	"tradepulse/internal/domain/invite"
+	"tradepulse/internal/domain/session"
 	"tradepulse/internal/domain/sourcedef"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/infrastructure/eventbus"
 	"tradepulse/internal/ingestion"
+	"tradepulse/internal/metrics"
 	"tradepulse/internal/personalization"
 	"tradepulse/internal/processing"
 	"tradepulse/internal/safefetch"
@@ -77,6 +79,7 @@ func run() error {
 		aFires  alert.FireRepository
 		chans   alert.ChannelRepository
 		dels    alert.DeliveryRepository
+		sessions session.Repository
 		ready   func(context.Context) error
 	)
 	if cfg.DatabaseURL != "" {
@@ -100,6 +103,7 @@ func run() error {
 		usage = postgres.NewUsageRepo(pool)
 		aRules, aFires = postgres.NewAlertRuleRepo(pool), postgres.NewAlertFireRepo(pool)
 		chans, dels = postgres.NewChannelRepo(pool), postgres.NewDeliveryRepo(pool)
+		sessions = postgres.NewSessionRepo(pool)
 		ready = pool.Ping
 		go postgres.RunRetention(ctx, pool, log, 1000, 365*24*time.Hour)
 		log.Info("storage: postgres")
@@ -110,6 +114,7 @@ func run() error {
 		usage = memory.NewUsageRepo()
 		aRules, aFires = memory.NewAlertRuleRepo(), memory.NewAlertFireRepo()
 		chans, dels = memory.NewChannelRepo(), memory.NewDeliveryRepo()
+		sessions = memory.NewSessionRepo()
 		log.Warn("storage: in-memory (development only; data is lost on restart)")
 	}
 	hub := delivery.NewHub(log, cfg.AllowedOrigins, cfg.MaxWSPerUser)
@@ -173,8 +178,9 @@ func run() error {
 	conns := connector.NewRegistry(connectors...)
 
 	// Alerts: rules evaluated on every event; deliveries to in-app and signed outbound webhooks.
-	sender := alerting.NewSender(log, chans, dels, fetcher, hub, []byte(cfg.WebhookSigningKey), alerting.SenderConfig{})
-	alertEngine := alerting.NewEngine(log, aRules, aFires, reg, hub, sender, alerting.Config{MaxFiresPerHour: cfg.AlertMaxFiresPerHour})
+	mreg := metrics.New()
+	sender := alerting.NewSender(log, chans, dels, fetcher, hub, []byte(cfg.WebhookSigningKey), alerting.SenderConfig{Metrics: mreg})
+	alertEngine := alerting.NewEngine(log, aRules, aFires, reg, hub, sender, alerting.Config{MaxFiresPerHour: cfg.AlertMaxFiresPerHour, Metrics: mreg})
 	allUsers, err := users.List(ctx)
 	if err != nil {
 		return err
@@ -198,12 +204,29 @@ func run() error {
 	apiSrv, err := api.New(api.Deps{
 		Cfg: cfg, Log: log, Users: users, Feeds: feeds, Invites: invites, Audit: audits, JWT: jwt,
 		Tickets: tickets, Personalizer: engine, Hub: hub, Registry: reg, Ready: ready, Sources: sources, Runs: runs, Bus: bus, Connectors: conns, Items: items, Usage: usage,
-		Alerts: alertEngine, AlertRules: aRules, AlertFires: aFires, Channels: chans, Deliveries: dels, Templates: templates, Outbound: sender,
+		Alerts: alertEngine, AlertRules: aRules, AlertFires: aFires, Channels: chans, Deliveries: dels, Templates: templates, Outbound: sender, Sessions: sessions, Metrics: mreg,
 	})
 	if err != nil {
 		return err
 	}
 	go apiSrv.Run(ctx)
+	apiSrv.RegisterMetrics(bus.Dropped)
+	go func() { // expired refresh tokens are kept 7 days (for reuse detection), then pruned
+		t := time.NewTicker(time.Hour)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-t.C:
+				if n, err := sessions.Prune(ctx, now.Add(-7*24*time.Hour)); err != nil {
+					log.Error("prune refresh tokens", "err", err)
+				} else if n > 0 {
+					log.Info("pruned refresh tokens", "deleted", n)
+				}
+			}
+		}
+	}()
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -213,7 +236,7 @@ func run() error {
 	}()
 	go alerting.RunRetention(ctx, aFires, dels, 30*24*time.Hour, log)
 	sched := ingestion.NewScheduler(log, sources, runs, items, conns, bus, reg, ingestion.SchedulerConfig{
-		Bounds: sourcedef.Bounds{Min: cfg.SourceMinInterval, Max: cfg.SourceMaxInterval},
+		Bounds: sourcedef.Bounds{Min: cfg.SourceMinInterval, Max: cfg.SourceMaxInterval}, Metrics: mreg,
 	})
 	wg.Add(1)
 	go func() {
@@ -252,7 +275,7 @@ func run() error {
 		return err
 	}
 
-	sctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	sctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 	_ = srv.Shutdown(sctx)
 	hub.Shutdown() // Shutdown does not track hijacked WebSocket connections
@@ -264,7 +287,11 @@ func run() error {
 func healthcheck() int {
 	addr := os.Getenv("ADDR")
 	if addr == "" {
-		addr = ":8080"
+		if p := os.Getenv("PORT"); p != "" {
+			addr = ":" + p
+		} else {
+			addr = ":8080"
+		}
 	}
 	if strings.HasPrefix(addr, ":") {
 		addr = "127.0.0.1" + addr

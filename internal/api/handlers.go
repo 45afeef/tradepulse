@@ -14,6 +14,7 @@ import (
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/feed"
 	"tradepulse/internal/domain/invite"
+	"tradepulse/internal/domain/session"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
 )
@@ -46,8 +47,10 @@ type publicUser struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 type tokenBody struct {
-	Token string     `json:"token" doc:"JWT; send as 'Authorization: Bearer <token>'"`
-	User  publicUser `json:"user"`
+	Token        string     `json:"token" doc:"Short-lived access token (JWT); send as 'Authorization: Bearer <token>'"`
+	RefreshToken string     `json:"refresh_token" doc:"Single-use; exchange it at POST /auth/refresh for a new pair before the access token expires"`
+	ExpiresIn    int        `json:"expires_in" doc:"Access token lifetime in seconds"`
+	User         publicUser `json:"user"`
 }
 type tokenOut struct{ Body tokenBody }
 
@@ -92,12 +95,31 @@ func (s *Server) ready(ctx context.Context, _ *struct{}) (*statusOut, error) {
 	return &statusOut{Body: statusBody{Status: "ok"}}, nil
 }
 
-func (s *Server) tokenFor(u user.User) (*tokenOut, error) {
+func (s *Server) tokenFor(ctx context.Context, u user.User) (*tokenOut, error) {
+	return s.issueSession(ctx, u, idgen.New())
+}
+
+// issueSession mints an access token plus a new refresh token in the given family.
+func (s *Server) issueSession(ctx context.Context, u user.User, familyID string) (*tokenOut, error) {
 	tok, err := s.JWT.Issue(u.ID)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("could not issue token")
 	}
-	return &tokenOut{Body: tokenBody{Token: tok, User: publicUser{ID: u.ID, Email: u.Email, CreatedAt: u.CreatedAt}}}, nil
+	ttl := s.Cfg.RefreshTTL
+	if ttl <= 0 {
+		ttl = 720 * time.Hour
+	}
+	rt, hash, err := session.New()
+	if err != nil {
+		return nil, huma.Error500InternalServerError("could not issue token")
+	}
+	now := time.Now().UTC()
+	if err := s.Sessions.Create(ctx, session.Token{ID: idgen.New(), UserID: u.ID, FamilyID: familyID, Hash: hash, CreatedAt: now, ExpiresAt: now.Add(ttl)}); err != nil {
+		s.Log.Error("store refresh token", "err", err)
+		return nil, huma.Error500InternalServerError("internal server error")
+	}
+	return &tokenOut{Body: tokenBody{Token: tok, RefreshToken: rt, ExpiresIn: int(s.JWT.TTL().Seconds()),
+		User: publicUser{ID: u.ID, Email: u.Email, CreatedAt: u.CreatedAt}}}, nil
 }
 
 func (s *Server) signup(ctx context.Context, in *registerIn) (*tokenOut, error) {
@@ -136,22 +158,30 @@ func (s *Server) signup(ctx context.Context, in *registerIn) (*tokenOut, error) 
 		return nil, huma.Error500InternalServerError("internal server error")
 	}
 	s.record(ctx, uid, "user.register", "user", uid, "invite "+inv.ID)
-	return s.tokenFor(u)
+	return s.tokenFor(ctx, u)
 }
 
 func (s *Server) login(ctx context.Context, in *credentialsIn) (*tokenOut, error) {
+	key := strings.ToLower(strings.TrimSpace(in.Body.Email))
+	if s.throttle.blocked(key) > 0 { // per-account lockout, identical for unknown and known emails
+		s.Metrics.Inc("auth_lockouts_total")
+		return nil, huma.Error429TooManyRequests("too many failed attempts for this account; try again later")
+	}
 	u, err := s.Users.GetByEmail(ctx, strings.TrimSpace(in.Body.Email))
 	hash := u.PasswordHash
 	if err != nil {
 		hash = s.dummyHash // equalise timing so unknown emails are indistinguishable
 	}
 	if !auth.VerifyPassword(in.Body.Password, hash) || err != nil {
+		s.throttle.fail(key)
+		s.Metrics.Inc("auth_login_failures_total")
 		return nil, huma.Error401Unauthorized("invalid email or password")
 	}
+	s.throttle.reset(key)
 	if u.Status != user.StatusActive {
 		return nil, huma.Error403Forbidden("account suspended")
 	}
-	return s.tokenFor(u)
+	return s.tokenFor(ctx, u)
 }
 
 func (s *Server) getSubscriptions(ctx context.Context, _ *struct{}) (*subscriptionsOut, error) {

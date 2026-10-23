@@ -36,6 +36,9 @@ func NewMemory(buffer int, log *slog.Logger) *Memory {
 	return &Memory{log: log, buf: buffer, subs: map[int]*subscription{}}
 }
 
+// Dropped returns how many events were dropped because a subscriber queue was full.
+func (b *Memory) Dropped() uint64 { return b.dropped.Load() }
+
 func (b *Memory) Publish(_ context.Context, e event.Event) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
