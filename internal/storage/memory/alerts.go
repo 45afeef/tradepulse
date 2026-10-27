@@ -8,6 +8,7 @@ import (
 
 	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/session"
+	"tradepulse/internal/page"
 )
 
 // ---- rules ----
@@ -111,6 +112,7 @@ func (r *AlertRuleRepo) Pause(_ context.Context, id, reason string) error {
 
 type AlertFireRepo struct {
 	mu    sync.Mutex
+	seq   int64
 	fires []alert.Fire
 }
 
@@ -119,6 +121,8 @@ func NewAlertFireRepo() *AlertFireRepo { return &AlertFireRepo{} }
 func (r *AlertFireRepo) Add(_ context.Context, f alert.Fire) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.seq++
+	f.Seq, f.Cursor = r.seq, page.Cursor(r.seq)
 	r.fires = append(r.fires, f)
 	if len(r.fires) > 20000 {
 		r.fires = append([]alert.Fire(nil), r.fires[len(r.fires)-20000:]...)
@@ -261,8 +265,9 @@ func (r *ChannelRepo) RecordResult(_ context.Context, id string, ok bool, at tim
 // ---- deliveries ----
 
 type DeliveryRepo struct {
-	mu sync.Mutex
-	ds []alert.Delivery
+	mu  sync.Mutex
+	seq int64
+	ds  []alert.Delivery
 }
 
 func NewDeliveryRepo() *DeliveryRepo { return &DeliveryRepo{} }
@@ -270,6 +275,8 @@ func NewDeliveryRepo() *DeliveryRepo { return &DeliveryRepo{} }
 func (r *DeliveryRepo) Add(_ context.Context, d alert.Delivery) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.seq++
+	d.Seq, d.Cursor = r.seq, page.Cursor(r.seq)
 	r.ds = append(r.ds, d)
 	if len(r.ds) > 20000 {
 		r.ds = append([]alert.Delivery(nil), r.ds[len(r.ds)-20000:]...)
@@ -381,4 +388,16 @@ func (r *SessionRepo) Prune(_ context.Context, before time.Time) (int64, error) 
 		}
 	}
 	return n, nil
+}
+
+func (r *AlertFireRepo) Page(_ context.Context, userID string, q page.Query) ([]alert.Fire, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return page.Select(r.fires, func(f alert.Fire) int64 { return f.Seq }, func(f alert.Fire) bool { return f.UserID == userID }, q), nil
+}
+
+func (r *DeliveryRepo) Page(_ context.Context, userID string, q page.Query) ([]alert.Delivery, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return page.Select(r.ds, func(d alert.Delivery) int64 { return d.Seq }, func(d alert.Delivery) bool { return d.UserID == userID }, q), nil
 }

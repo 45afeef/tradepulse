@@ -51,3 +51,19 @@ jobs:
           image-ref: tradepulse:ci
           severity: HIGH,CRITICAL
           exit-code: "0"
+
+  contract:
+    # Flags breaking changes to the public API (docs/API.md). Advisory until the first frontend release.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Compare openapi.json with the base branch
+        continue-on-error: true
+        run: |
+          if git show "origin/${{ github.base_ref }}:openapi.json" > /tmp/base.json 2>/dev/null; then
+            docker run --rm -v /tmp/base.json:/base.json -v "$PWD/openapi.json:/new.json" tufin/oasdiff breaking /base.json /new.json --fail-on ERR
+          else
+            echo "no openapi.json on the base branch yet; skipping"
+          fi

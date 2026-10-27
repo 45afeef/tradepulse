@@ -93,6 +93,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 		if o := r.Header.Get("Origin"); o != "" && slices.Contains(s.Cfg.AllowedOrigins, o) {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", o)
+			h.Set("Access-Control-Expose-Headers", "X-Request-ID, Retry-After")
 			h.Add("Vary", "Origin")
 			if r.Method == http.MethodOptions {
 				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")

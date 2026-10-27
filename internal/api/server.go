@@ -101,7 +101,7 @@ func (s *Server) Run(ctx context.Context) {
 // types + handler in handlers.go/admin.go, then register it here WITH a summary,
 // description, tag and the error codes it can return (docs_test.go enforces this).
 func (s *Server) routes(mux *http.ServeMux) huma.API {
-	cfg := huma.DefaultConfig("TradePulse API", "0.3.0")
+	cfg := huma.DefaultConfig("TradePulse API", "1.0.0-rc.1")
 	cfg.CreateHooks = nil // no "$schema" fields in responses
 	cfg.Info.Description = overview
 	cfg.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
@@ -152,7 +152,7 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 	huma.Register(api, huma.Operation{OperationID: "get-feed", Method: http.MethodGet, Path: "/api/v1/me/feed", Tags: []string{"me"},
 		Summary: "Recent feed items (newest first)", Security: secured, Middlewares: member,
 		Description: "Your most recent delivered items, each with a `reason` explaining why it matched. " +
-			"Use after a WebSocket reconnect to catch up on anything missed.", Errors: []int{401}}, s.getFeed)
+			"Paginated: pass `before=<next_cursor>` to scroll back; after a WebSocket reconnect call with `after=<cursor of the last item you saw>` (oldest first) and repeat until `next_cursor` is absent.", Errors: []int{401}}, s.getFeed)
 
 	huma.Register(api, huma.Operation{OperationID: "list-event-types", Method: http.MethodGet, Path: "/api/v1/event-types", Tags: []string{"catalog"},
 		Summary: "Event types and filterable fields", Security: secured, Middlewares: member,
@@ -185,7 +185,7 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 		Description: "Restores access and live matching with the member's saved subscriptions.", Errors: []int{401, 403, 404}}, s.reactivateUser)
 	huma.Register(api, huma.Operation{OperationID: "list-audit", Method: http.MethodGet, Path: "/api/v1/admin/audit", Tags: []string{"admin"},
 		Summary: "Audit log", Security: secured, Middlewares: admin,
-		Description: "Newest first. Records registrations, invite creation/revocation and suspensions/reactivations (never secrets).", Errors: []int{401, 403}}, s.listAudit)
+		Description: "Newest first, paginated (`before`/`after`/`next_cursor`). Records registrations, invite creation/revocation and suspensions/reactivations (never secrets).", Errors: []int{401, 403}}, s.listAudit)
 	huma.Register(api, huma.Operation{OperationID: "list-catalog-sources", Method: http.MethodGet, Path: "/api/v1/sources", Tags: []string{"catalog"},
 		Summary: "Sources you can subscribe to", Security: secured, Middlewares: member,
 		Description: "Enabled sources with their names and topics (entities). Use a source's `name` in a `source` subscription, " +
@@ -252,7 +252,7 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 			"after applying cooldown. Nothing is saved or sent. Use it to avoid noisy rules.", Errors: []int{401, 422}}, s.previewRule)
 	huma.Register(api, huma.Operation{OperationID: "list-alert-fires", Method: http.MethodGet, Path: "/api/v1/me/alerts/fires", Tags: []string{"alerts"},
 		Summary: "Recent alerts that fired", Security: secured, Middlewares: member,
-		Description: "Newest first, each with a `reason` explaining why it fired. Use after a WebSocket reconnect to catch up.", Errors: []int{401}}, s.listFires)
+		Description: "Newest first, each with a `reason` explaining why it fired. Paginated like the feed (`before`/`after`/`next_cursor`).", Errors: []int{401}}, s.listFires)
 	huma.Register(api, huma.Operation{OperationID: "get-alert", Method: http.MethodGet, Path: "/api/v1/me/alerts/{id}", Tags: []string{"alerts"},
 		Summary: "Get an alert rule", Security: secured, Middlewares: member, Description: "Only your own rules are visible (404 otherwise).", Errors: []int{401, 404}}, s.getRule)
 	huma.Register(api, huma.Operation{OperationID: "update-alert", Method: http.MethodPut, Path: "/api/v1/me/alerts/{id}", Tags: []string{"alerts"},
@@ -270,7 +270,7 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 			"The secret is returned **once**. Failed deliveries are retried with back-off; after 10 consecutive failures the channel is disabled until you re-enable it. At most 5 channels.", Errors: []int{401, 409, 422}}, s.createChannel)
 	huma.Register(api, huma.Operation{OperationID: "list-deliveries", Method: http.MethodGet, Path: "/api/v1/me/channels/deliveries", Tags: []string{"channels"},
 		Summary: "Recent outbound deliveries", Security: secured, Middlewares: member,
-		Description: "Delivery history (status, attempts, error) for your channels, newest first.", Errors: []int{401}}, s.listDeliveries)
+		Description: "Delivery history (status, attempts, error) for your channels, newest first. Paginated (`before`/`after`/`next_cursor`).", Errors: []int{401}}, s.listDeliveries)
 	huma.Register(api, huma.Operation{OperationID: "delete-channel", Method: http.MethodDelete, Path: "/api/v1/me/channels/{id}", Tags: []string{"channels"},
 		Summary: "Delete a channel", Security: secured, Middlewares: member, DefaultStatus: http.StatusNoContent,
 		Description: "Also removes it from your alert rules (rules left without a channel fall back to `in_app`).", Errors: []int{401, 404}}, s.deleteChannel)
@@ -307,6 +307,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.routes(mux)
 	mux.HandleFunc("GET /metrics", s.metricsHandler) // Prometheus text; 404 unless METRICS_TOKEN is set
+	mux.HandleFunc("/", s.notFound) // unknown paths/methods get the same JSON error shape as everything else
 	mux.HandleFunc("GET /ws", s.ws)                            // WebSocket: plain handler, outside OpenAPI
 	mux.HandleFunc("POST /api/v1/hooks/{name}", s.hook)       // inbound webhook: signs the raw body, documented in the overview
 
@@ -325,4 +326,8 @@ func (s *Server) Handler() http.Handler {
 func OpenAPISpec() ([]byte, error) {
 	api := (&Server{}).routes(http.NewServeMux())
 	return json.MarshalIndent(api.OpenAPI(), "", "  ")
+}
+
+func (s *Server) notFound(w http.ResponseWriter, _ *http.Request) {
+	writeError(w, http.StatusNotFound, "not_found", "no such endpoint")
 }

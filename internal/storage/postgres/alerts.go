@@ -11,6 +11,7 @@ import (
 
 	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/rule"
+	"tradepulse/internal/page"
 )
 
 func jsonStr(v any) (string, error) {
@@ -177,9 +178,18 @@ func (r *AlertFireRepo) Recent(ctx context.Context, userID string, limit int) ([
 	if limit < 1 || limit > 500 {
 		limit = 50
 	}
-	rows, err := r.db.Query(ctx,
-		`SELECT id, rule_id, user_id, event_id, rule_name, severity, title, body, url, source, entities, reason, fired_at
-		 FROM alert_fires WHERE user_id=$1 ORDER BY seq DESC LIMIT $2`, userID, limit)
+	return r.Page(ctx, userID, page.Query{Limit: limit})
+}
+
+func (r *AlertFireRepo) Page(ctx context.Context, userID string, q page.Query) ([]alert.Fire, error) {
+	const cols = `seq, id, rule_id, user_id, event_id, rule_name, severity, title, body, url, source, entities, reason, fired_at`
+	var rows pgx.Rows
+	var err error
+	if q.Asc() {
+		rows, err = r.db.Query(ctx, `SELECT `+cols+` FROM alert_fires WHERE user_id=$1 AND seq > $2 ORDER BY seq ASC LIMIT $3`, userID, q.After, q.Limit)
+	} else {
+		rows, err = r.db.Query(ctx, `SELECT `+cols+` FROM alert_fires WHERE user_id=$1 AND ($2::bigint = 0 OR seq < $2) ORDER BY seq DESC LIMIT $3`, userID, q.Before, q.Limit)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -188,9 +198,10 @@ func (r *AlertFireRepo) Recent(ctx context.Context, userID string, limit int) ([
 	for rows.Next() {
 		var f alert.Fire
 		var ents []byte
-		if err := rows.Scan(&f.ID, &f.RuleID, &f.UserID, &f.EventID, &f.RuleName, &f.Severity, &f.Title, &f.Body, &f.URL, &f.Source, &ents, &f.Reason, &f.FiredAt); err != nil {
+		if err := rows.Scan(&f.Seq, &f.ID, &f.RuleID, &f.UserID, &f.EventID, &f.RuleName, &f.Severity, &f.Title, &f.Body, &f.URL, &f.Source, &ents, &f.Reason, &f.FiredAt); err != nil {
 			return nil, err
 		}
+		f.Cursor = page.Cursor(f.Seq)
 		if err := json.Unmarshal(ents, &f.Entities); err != nil {
 			return nil, err
 		}
@@ -298,8 +309,18 @@ func (r *DeliveryRepo) Recent(ctx context.Context, userID string, limit int) ([]
 	if limit < 1 || limit > 500 {
 		limit = 50
 	}
-	rows, err := r.db.Query(ctx,
-		`SELECT id, channel_id, user_id, fire_id, at, ok, status, attempts, error FROM channel_deliveries WHERE user_id=$1 ORDER BY at DESC LIMIT $2`, userID, limit)
+	return r.Page(ctx, userID, page.Query{Limit: limit})
+}
+
+func (r *DeliveryRepo) Page(ctx context.Context, userID string, q page.Query) ([]alert.Delivery, error) {
+	const cols = `seq, id, channel_id, user_id, fire_id, at, ok, status, attempts, error`
+	var rows pgx.Rows
+	var err error
+	if q.Asc() {
+		rows, err = r.db.Query(ctx, `SELECT `+cols+` FROM channel_deliveries WHERE user_id=$1 AND seq > $2 ORDER BY seq ASC LIMIT $3`, userID, q.After, q.Limit)
+	} else {
+		rows, err = r.db.Query(ctx, `SELECT `+cols+` FROM channel_deliveries WHERE user_id=$1 AND ($2::bigint = 0 OR seq < $2) ORDER BY seq DESC LIMIT $3`, userID, q.Before, q.Limit)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -307,9 +328,10 @@ func (r *DeliveryRepo) Recent(ctx context.Context, userID string, limit int) ([]
 	out := []alert.Delivery{}
 	for rows.Next() {
 		var d alert.Delivery
-		if err := rows.Scan(&d.ID, &d.ChannelID, &d.UserID, &d.FireID, &d.At, &d.OK, &d.Status, &d.Attempts, &d.Error); err != nil {
+		if err := rows.Scan(&d.Seq, &d.ID, &d.ChannelID, &d.UserID, &d.FireID, &d.At, &d.OK, &d.Status, &d.Attempts, &d.Error); err != nil {
 			return nil, err
 		}
+		d.Cursor = page.Cursor(d.Seq)
 		out = append(out, d)
 	}
 	return out, rows.Err()

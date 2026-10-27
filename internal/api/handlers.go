@@ -17,6 +17,7 @@ import (
 	"tradepulse/internal/domain/session"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
+	"tradepulse/internal/page"
 )
 
 func userID(ctx context.Context) string { id, _ := ctx.Value(userKey).(string); return id }
@@ -63,11 +64,23 @@ type eventTypesBody struct {
 }
 type eventTypesOut struct{ Body eventTypesBody }
 
-type feedIn struct {
-	Limit int `query:"limit" default:"50" minimum:"1" maximum:"200" doc:"Max items, newest first"`
+// pageIn is the shared pagination query (see docs/API.md and the overview).
+type pageIn struct {
+	Limit  int    `query:"limit" default:"50" minimum:"1" maximum:"200" doc:"Page size"`
+	Before string `query:"before" maxLength:"64" doc:"Cursor: items OLDER than this position, newest first (scroll back)"`
+	After  string `query:"after" maxLength:"64" doc:"Cursor: items NEWER than this position, OLDEST first (catch-up after a reconnect); repeat with next_cursor until it is empty"`
+}
+
+func orderOf(q page.Query) string {
+	if q.Asc() {
+		return "asc"
+	}
+	return "desc"
 }
 type feedBody struct {
-	Items []feed.FeedItem `json:"items"`
+	Items      []feed.FeedItem `json:"items"`
+	NextCursor string          `json:"next_cursor,omitempty" doc:"Pass as 'before' (order desc) or 'after' (order asc) for the next page; absent when there is nothing more"`
+	Order      string          `json:"order" enum:"desc,asc"`
 }
 type feedOut struct{ Body feedBody }
 
@@ -209,12 +222,20 @@ func (s *Server) listEventTypes(_ context.Context, _ *struct{}) (*eventTypesOut,
 	return &eventTypesOut{Body: eventTypesBody{Types: s.Registry.List(), BuiltinFields: event.BuiltinFieldDefs()}}, nil
 }
 
-func (s *Server) getFeed(ctx context.Context, in *feedIn) (*feedOut, error) {
-	items, err := s.Feeds.Recent(ctx, userID(ctx), in.Limit)
+func (s *Server) getFeed(ctx context.Context, in *pageIn) (*feedOut, error) {
+	q, err := page.Parse(in.Limit, 200, in.Before, in.After)
+	if err != nil {
+		return nil, huma.Error422UnprocessableEntity(err.Error())
+	}
+	items, err := s.Feeds.Page(ctx, userID(ctx), q)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("internal server error")
 	}
-	return &feedOut{Body: feedBody{Items: items}}, nil
+	next := ""
+	if n := len(items); n > 0 {
+		next = page.NextCursor(q, n, items[n-1].Seq)
+	}
+	return &feedOut{Body: feedBody{Items: items, NextCursor: next, Order: orderOf(q)}}, nil
 }
 
 func (s *Server) wsTicket(ctx context.Context, _ *struct{}) (*ticketOut, error) {

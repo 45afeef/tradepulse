@@ -49,10 +49,21 @@
               "array",
               "null"
             ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "order": {
+            "enum": [
+              "desc",
+              "asc"
+            ],
+            "type": "string"
           }
         },
         "required": [
-          "entries"
+          "entries",
+          "order"
         ],
         "type": "object"
       },
@@ -303,10 +314,21 @@
               "array",
               "null"
             ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "order": {
+            "enum": [
+              "desc",
+              "asc"
+            ],
+            "type": "string"
           }
         },
         "required": [
-          "deliveries"
+          "deliveries",
+          "order"
         ],
         "type": "object"
       },
@@ -322,6 +344,10 @@
             "type": "integer"
           },
           "channel_id": {
+            "type": "string"
+          },
+          "cursor": {
+            "description": "Opaque position; use as before/after",
             "type": "string"
           },
           "error": {
@@ -348,7 +374,8 @@
           "fire_id",
           "at",
           "ok",
-          "attempts"
+          "attempts",
+          "cursor"
         ],
         "type": "object"
       },
@@ -369,6 +396,10 @@
             "format": "date-time",
             "type": "string"
           },
+          "cursor": {
+            "description": "Opaque position; use as before/after",
+            "type": "string"
+          },
           "detail": {
             "type": "string"
           },
@@ -386,7 +417,8 @@
           "id",
           "at",
           "actor_id",
-          "action"
+          "action",
+          "cursor"
         ],
         "type": "object"
       },
@@ -502,10 +534,22 @@
               "array",
               "null"
             ]
+          },
+          "next_cursor": {
+            "description": "Pass as 'before' (order desc) or 'after' (order asc) for the next page; absent when there is nothing more",
+            "type": "string"
+          },
+          "order": {
+            "enum": [
+              "desc",
+              "asc"
+            ],
+            "type": "string"
           }
         },
         "required": [
-          "items"
+          "items",
+          "order"
         ],
         "type": "object"
       },
@@ -517,6 +561,10 @@
           },
           "created_at": {
             "format": "date-time",
+            "type": "string"
+          },
+          "cursor": {
+            "description": "Opaque position in your feed; use as before/after",
             "type": "string"
           },
           "entities": {
@@ -564,7 +612,8 @@
           "body",
           "severity",
           "reason",
-          "created_at"
+          "created_at",
+          "cursor"
         ],
         "type": "object"
       },
@@ -591,6 +640,10 @@
         "additionalProperties": false,
         "properties": {
           "body": {
+            "type": "string"
+          },
+          "cursor": {
+            "description": "Opaque position; use as before/after",
             "type": "string"
           },
           "entities": {
@@ -646,7 +699,8 @@
           "source",
           "entities",
           "reason",
-          "fired_at"
+          "fired_at",
+          "cursor"
         ],
         "type": "object"
       },
@@ -661,10 +715,21 @@
               "array",
               "null"
             ]
+          },
+          "next_cursor": {
+            "type": "string"
+          },
+          "order": {
+            "enum": [
+              "desc",
+              "asc"
+            ],
+            "type": "string"
           }
         },
         "required": [
-          "fires"
+          "fires",
+          "order"
         ],
         "type": "object"
       },
@@ -2008,29 +2073,51 @@
     }
   },
   "info": {
-    "description": "\n**TradePulse** collects information from many sources, normalizes it into *events*, and delivers\n**the items relevant to you** in one live feed, with automatic alerts. Access is **invite-only**.\n\n## Quick start (5 minutes)\n1. **Get an invite code** from an administrator (looks like `tp_inv_…`). Codes are single-use and expire.\n2. `POST /api/v1/auth/register` with your email, a password (10+ characters) and the invite code. The response contains a **token**.\n3. Click **Authorize** in this page (or send `Authorization: Bearer \u003ctoken\u003e` on every request).\n4. `GET /api/v1/event-types` shows what kinds of events exist and **which fields you can filter on**.\n5. `PUT /api/v1/me/subscriptions` tells the system what you care about (see *Subscriptions* below). **Until you subscribe, your feed is empty.**\n6. `GET /api/v1/me/feed` returns recent items. For live delivery: `POST /api/v1/ws-ticket`, then open the WebSocket (see *Real-time*).\n\n## Authentication\n- Register or log in to get a JWT; send it as `Authorization: Bearer \u003ctoken\u003e`.\n- Access tokens are short-lived (15 minutes by default, see `expires_in`). Keep the `refresh_token` and call `POST /api/v1/auth/refresh` before expiry: it returns a **new pair** and the old refresh token stops working (reusing an old one revokes the whole session). `POST /api/v1/auth/logout` ends a session, `POST /api/v1/me/logout-all` ends all of them, `POST /api/v1/me/password` changes your password (other sessions are signed out).\n- Repeated failed logins lock the account for a while (the same answer is given whether or not the account exists).\n- A **suspended** account is rejected everywhere immediately and its live connections are closed.\n- Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see `Retry-After`).\n\n## Subscriptions (what you receive)\nA subscription says *what to watch*; optional **types** and **conditions** narrow it. An item is delivered if **any** subscription matches, unless it is **muted**.\n\n| kind | matches when |\n|---|---|\n| `entity` | the event lists that entity (case-insensitive), e.g. `tcs`, `checkout` |\n| `keyword` | the whole word/phrase appears in the item's title or text, e.g. `repo rate` |\n| `source` | the event comes from that source id, e.g. `status_sim` |\n\n**Conditions** are `field operator value` checks; **all** must hold. Operators: `\u003e` `\u003e=` `\u003c` `\u003c=` `==` `!=` `in` `contains` `any_of`.\nFields come from `GET /api/v1/event-types` (built-in: `type`, `source`, `title`, `summary`, `url`, `entity`; plus each type's own fields).\nIf an event does not have the field, the condition is simply *false*.\n\nExample: notify me when *checkout* is anything other than up:\n```json\n{\"subscriptions\":[{\"kind\":\"entity\",\"value\":\"checkout\",\"conditions\":[{\"field\":\"status\",\"op\":\"!=\",\"value\":\"up\"}]}],\n \"muted\":[\"maintenance\"]}\n```\nEvery delivered item has a **reason** explaining which subscription matched.\n\n## Sources\nItems come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). `GET /api/v1/sources` lists the enabled ones: subscribe with kind `source` and the source's name, or with kind `entity` and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.\n\n## Alerts and channels\nThe feed shows everything that matches your subscriptions; **alerts** are the subset you must not miss, pushed to you immediately.\n1. `GET /api/v1/alert-templates` lists ready-made rules, or build your own: **scope** (entities / keywords / sources) + optional **types** and **conditions** (same fields as in subscriptions).\n2. `POST /api/v1/me/alerts/preview` replays recent events against your draft (\"would have fired 7 times\") before you save it. `POST /api/v1/me/alerts` (or `/from-template`) saves it.\n3. When a rule fires you get a live WebSocket message `{\"type\":\"alert\",\"data\":{...}}` (channel `in_app`) and/or a signed POST to your own HTTPS endpoint (`POST /api/v1/me/channels`; signed like inbound webhooks, retried, auto-disabled after repeated failures). Every fire has a **reason**; history: `GET /api/v1/me/alerts/fires`.\n4. Guardrails: per-rule **cooldown** (default 5 minutes), at most 50 rules and 5 channels per user, and a rule that fires too often in an hour is **paused automatically** (WebSocket message `alert_paused`, `paused_reason` on the rule). Re-enable it by saving it with `enabled: true` after tightening it.\n\n## Inbound webhooks (push items from your own systems)\nAn admin creates a source of type `webhook`; the response shows its **secret once** and its path (`/api/v1/hooks/\u003cname\u003e`). Then POST JSON from any system (n8n, Zapier, scripts):\n```json\n{\"id\":\"optional-unique-id\",\"title\":\"Required headline\",\"summary\":\"optional\",\"url\":\"https://example.com/story\",\"entities\":[\"topic\"],\"published_at\":\"2026-10-17T10:00:00Z\"}\n```\n- **hmac** (default): send `X-TP-Timestamp` (unix seconds, within 5 minutes) and `X-TP-Signature: sha256=\u003chex\u003e` where hex = HMAC-SHA256(secret, \"\u003ctimestamp\u003e.\u003craw body\u003e\").\n- **token**: send the secret as `X-Webhook-Token` or `Authorization: Bearer \u003csecret\u003e` (for tools that cannot sign).\n- Responses: `201` accepted, `200` duplicate (same `id` or same title+url: safe to retry), `401` bad credentials (also for unknown sources), `413` over 64 KB, `422` invalid payload, `429` rate limited, `503` webhooks not enabled on the server. Details and code samples: `docs/WEBHOOKS.md` in the repository.\n\n## Real-time (WebSocket)\n1. `POST /api/v1/ws-ticket` (with your token) → a **one-time ticket valid for 30 seconds**.\n2. Connect to `ws(s)://\u003chost\u003e/ws?ticket=\u003cticket\u003e` (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.\n3. Messages are JSON text frames:\n```json\n{\"type\":\"connected\"}\n{\"type\":\"feed_item\",\"data\":{\"id\":\"…\",\"title\":\"checkout is down\",\"body\":\"Latency 950 ms\",\"severity\":\"notable\",\"reason\":\"Matched your entity subscription \\\"checkout\\\"\",\"created_at\":\"…\"}}\n```\n4. **Reconnect with backoff** when the connection drops (deploys and idle limits close connections). After reconnecting, call `GET /api/v1/me/feed` to catch up on anything missed.\n5. Limits: at most 5 simultaneous connections per user; slow readers are disconnected. Close code 1008 = policy (cap/suspended), 1001 = server going away.\nThe WebSocket cannot be tried from this page; use a client such as Postman or `websocat`.\n\n## Errors\nErrors use **RFC 9457 problem JSON**: `{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"…\"}`. Validation failures (422) list the offending fields.\nCommon codes: `401` missing/invalid token · `403` not allowed (e.g. not an admin, bad invite) · `409` conflict · `422` invalid input · `429` rate limited · `413` body too large.\n\n## Administrators\nEndpoints under **admin** require the `admin` role (others get 403). Typical flow: create an invite → share the code → watch its status → suspend/reactivate members → review the audit log.\n",
+    "description": "\n**TradePulse** collects information from many sources, normalizes it into *events*, and delivers\n**the items relevant to you** in one live feed, with automatic alerts. Access is **invite-only**.\n\n## Quick start (5 minutes)\n1. **Get an invite code** from an administrator (looks like `tp_inv_…`). Codes are single-use and expire.\n2. `POST /api/v1/auth/register` with your email, a password (10+ characters) and the invite code. The response contains a **token**.\n3. Click **Authorize** in this page (or send `Authorization: Bearer \u003ctoken\u003e` on every request).\n4. `GET /api/v1/event-types` shows what kinds of events exist and **which fields you can filter on**.\n5. `PUT /api/v1/me/subscriptions` tells the system what you care about (see *Subscriptions* below). **Until you subscribe, your feed is empty.**\n6. `GET /api/v1/me/feed` returns recent items. For live delivery: `POST /api/v1/ws-ticket`, then open the WebSocket (see *Real-time*).\n\n## Authentication\n- Register or log in to get a JWT; send it as `Authorization: Bearer \u003ctoken\u003e`.\n- Access tokens are short-lived (15 minutes by default, see `expires_in`). Keep the `refresh_token` and call `POST /api/v1/auth/refresh` before expiry: it returns a **new pair** and the old refresh token stops working (reusing an old one revokes the whole session). `POST /api/v1/auth/logout` ends a session, `POST /api/v1/me/logout-all` ends all of them, `POST /api/v1/me/password` changes your password (other sessions are signed out).\n- Repeated failed logins lock the account for a while (the same answer is given whether or not the account exists).\n- A **suspended** account is rejected everywhere immediately and its live connections are closed.\n- Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see `Retry-After`).\n\n## Subscriptions (what you receive)\nA subscription says *what to watch*; optional **types** and **conditions** narrow it. An item is delivered if **any** subscription matches, unless it is **muted**.\n\n| kind | matches when |\n|---|---|\n| `entity` | the event lists that entity (case-insensitive), e.g. `tcs`, `checkout` |\n| `keyword` | the whole word/phrase appears in the item's title or text, e.g. `repo rate` |\n| `source` | the event comes from that source id, e.g. `status_sim` |\n\n**Conditions** are `field operator value` checks; **all** must hold. Operators: `\u003e` `\u003e=` `\u003c` `\u003c=` `==` `!=` `in` `contains` `any_of`.\nFields come from `GET /api/v1/event-types` (built-in: `type`, `source`, `title`, `summary`, `url`, `entity`; plus each type's own fields).\nIf an event does not have the field, the condition is simply *false*.\n\nExample: notify me when *checkout* is anything other than up:\n```json\n{\"subscriptions\":[{\"kind\":\"entity\",\"value\":\"checkout\",\"conditions\":[{\"field\":\"status\",\"op\":\"!=\",\"value\":\"up\"}]}],\n \"muted\":[\"maintenance\"]}\n```\nEvery delivered item has a **reason** explaining which subscription matched.\n\n## Sources\nItems come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). `GET /api/v1/sources` lists the enabled ones: subscribe with kind `source` and the source's name, or with kind `entity` and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.\n\n## Alerts and channels\nThe feed shows everything that matches your subscriptions; **alerts** are the subset you must not miss, pushed to you immediately.\n1. `GET /api/v1/alert-templates` lists ready-made rules, or build your own: **scope** (entities / keywords / sources) + optional **types** and **conditions** (same fields as in subscriptions).\n2. `POST /api/v1/me/alerts/preview` replays recent events against your draft (\"would have fired 7 times\") before you save it. `POST /api/v1/me/alerts` (or `/from-template`) saves it.\n3. When a rule fires you get a live WebSocket message `{\"type\":\"alert\",\"data\":{...}}` (channel `in_app`) and/or a signed POST to your own HTTPS endpoint (`POST /api/v1/me/channels`; signed like inbound webhooks, retried, auto-disabled after repeated failures). Every fire has a **reason**; history: `GET /api/v1/me/alerts/fires`.\n4. Guardrails: per-rule **cooldown** (default 5 minutes), at most 50 rules and 5 channels per user, and a rule that fires too often in an hour is **paused automatically** (WebSocket message `alert_paused`, `paused_reason` on the rule). Re-enable it by saving it with `enabled: true` after tightening it.\n\n## Inbound webhooks (push items from your own systems)\nAn admin creates a source of type `webhook`; the response shows its **secret once** and its path (`/api/v1/hooks/\u003cname\u003e`). Then POST JSON from any system (n8n, Zapier, scripts):\n```json\n{\"id\":\"optional-unique-id\",\"title\":\"Required headline\",\"summary\":\"optional\",\"url\":\"https://example.com/story\",\"entities\":[\"topic\"],\"published_at\":\"2026-10-17T10:00:00Z\"}\n```\n- **hmac** (default): send `X-TP-Timestamp` (unix seconds, within 5 minutes) and `X-TP-Signature: sha256=\u003chex\u003e` where hex = HMAC-SHA256(secret, \"\u003ctimestamp\u003e.\u003craw body\u003e\").\n- **token**: send the secret as `X-Webhook-Token` or `Authorization: Bearer \u003csecret\u003e` (for tools that cannot sign).\n- Responses: `201` accepted, `200` duplicate (same `id` or same title+url: safe to retry), `401` bad credentials (also for unknown sources), `413` over 64 KB, `422` invalid payload, `429` rate limited, `503` webhooks not enabled on the server. Details and code samples: `docs/WEBHOOKS.md` in the repository.\n\n## Pagination\nGrowing lists (feed, alert fires, deliveries, audit) are paged with opaque **cursors**. Responses contain `next_cursor` and `order`. Scroll back: `?before=\u003cnext_cursor\u003e` (newest first). Catch up after a reconnect: `?after=\u003ccursor of the last item you saw\u003e` returns the newer items **oldest first**; repeat with the new `next_cursor` until it is absent. Every item has a `cursor` (live WebSocket feed items too). Never parse cursors. Short, bounded lists (rules, channels, sources, members) are returned whole.\n\n## Real-time (WebSocket)\n1. `POST /api/v1/ws-ticket` (with your token) → a **one-time ticket valid for 30 seconds**.\n2. Connect to `ws(s)://\u003chost\u003e/ws?ticket=\u003cticket\u003e` (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.\n3. Messages are JSON text frames:\n```json\n{\"type\":\"connected\"}\n{\"type\":\"feed_item\",\"data\":{\"id\":\"…\",\"title\":\"checkout is down\",\"body\":\"Latency 950 ms\",\"severity\":\"notable\",\"reason\":\"Matched your entity subscription \\\"checkout\\\"\",\"created_at\":\"…\"}}\n```\n4. **Reconnect with backoff** when the connection drops (deploys and idle limits close connections). After reconnecting, call `GET /api/v1/me/feed` to catch up on anything missed.\n5. Limits: at most 5 simultaneous connections per user; slow readers are disconnected. Close code 1008 = policy (cap/suspended), 1001 = server going away.\nThe WebSocket cannot be tried from this page; use a client such as Postman or `websocat`.\n\n## Errors\nEvery error, including unknown paths, uses **RFC 9457 problem JSON** (`Content-Type: application/problem+json`): `{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"…\"}`. Responses carry `X-Request-ID` (quote it when reporting problems) and rate-limit responses carry `Retry-After`. Validation failures (422) list the offending fields.\nCommon codes: `401` missing/invalid token · `403` not allowed (e.g. not an admin, bad invite) · `409` conflict · `422` invalid input · `429` rate limited · `413` body too large.\n\n## Administrators\nEndpoints under **admin** require the `admin` role (others get 403). Typical flow: create an invite → share the code → watch its status → suspend/reactivate members → review the audit log.\n",
     "title": "TradePulse API",
-    "version": "0.3.0"
+    "version": "1.0.0-rc.1"
   },
   "openapi": "3.1.0",
   "paths": {
     "/api/v1/admin/audit": {
       "get": {
-        "description": "Newest first. Records registrations, invite creation/revocation and suspensions/reactivations (never secrets).",
+        "description": "Newest first, paginated (`before`/`after`/`next_cursor`). Records registrations, invite creation/revocation and suspensions/reactivations (never secrets).",
         "operationId": "list-audit",
         "parameters": [
           {
-            "description": "Max entries, newest first",
+            "description": "Page size",
             "explode": false,
             "in": "query",
             "name": "limit",
             "schema": {
               "default": 100,
-              "description": "Max entries, newest first",
+              "description": "Page size",
               "format": "int64",
               "maximum": 500,
               "minimum": 1,
               "type": "integer"
+            }
+          },
+          {
+            "description": "Cursor: entries older than this position (newest first)",
+            "explode": false,
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "description": "Cursor: entries older than this position (newest first)",
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Cursor: entries newer than this position (oldest first)",
+            "explode": false,
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "description": "Cursor: entries newer than this position (oldest first)",
+              "maxLength": 64,
+              "type": "string"
             }
           }
         ],
@@ -4008,21 +4095,43 @@
     },
     "/api/v1/me/alerts/fires": {
       "get": {
-        "description": "Newest first, each with a `reason` explaining why it fired. Use after a WebSocket reconnect to catch up.",
+        "description": "Newest first, each with a `reason` explaining why it fired. Paginated like the feed (`before`/`after`/`next_cursor`).",
         "operationId": "list-alert-fires",
         "parameters": [
           {
-            "description": "Max entries, newest first",
+            "description": "Page size",
             "explode": false,
             "in": "query",
             "name": "limit",
             "schema": {
               "default": 50,
-              "description": "Max entries, newest first",
+              "description": "Page size",
               "format": "int64",
               "maximum": 200,
               "minimum": 1,
               "type": "integer"
+            }
+          },
+          {
+            "description": "Cursor: items OLDER than this position, newest first (scroll back)",
+            "explode": false,
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "description": "Cursor: items OLDER than this position, newest first (scroll back)",
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Cursor: items NEWER than this position, OLDEST first (catch-up after a reconnect); repeat with next_cursor until it is empty",
+            "explode": false,
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "description": "Cursor: items NEWER than this position, OLDEST first (catch-up after a reconnect); repeat with next_cursor until it is empty",
+              "maxLength": 64,
+              "type": "string"
             }
           }
         ],
@@ -4594,21 +4703,43 @@
     },
     "/api/v1/me/channels/deliveries": {
       "get": {
-        "description": "Delivery history (status, attempts, error) for your channels, newest first.",
+        "description": "Delivery history (status, attempts, error) for your channels, newest first. Paginated (`before`/`after`/`next_cursor`).",
         "operationId": "list-deliveries",
         "parameters": [
           {
-            "description": "Max entries, newest first",
+            "description": "Page size",
             "explode": false,
             "in": "query",
             "name": "limit",
             "schema": {
               "default": 50,
-              "description": "Max entries, newest first",
+              "description": "Page size",
               "format": "int64",
               "maximum": 200,
               "minimum": 1,
               "type": "integer"
+            }
+          },
+          {
+            "description": "Cursor: items OLDER than this position, newest first (scroll back)",
+            "explode": false,
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "description": "Cursor: items OLDER than this position, newest first (scroll back)",
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Cursor: items NEWER than this position, OLDEST first (catch-up after a reconnect); repeat with next_cursor until it is empty",
+            "explode": false,
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "description": "Cursor: items NEWER than this position, OLDEST first (catch-up after a reconnect); repeat with next_cursor until it is empty",
+              "maxLength": 64,
+              "type": "string"
             }
           }
         ],
@@ -4990,21 +5121,43 @@
     },
     "/api/v1/me/feed": {
       "get": {
-        "description": "Your most recent delivered items, each with a `reason` explaining why it matched. Use after a WebSocket reconnect to catch up on anything missed.",
+        "description": "Your most recent delivered items, each with a `reason` explaining why it matched. Paginated: pass `before=\u003cnext_cursor\u003e` to scroll back; after a WebSocket reconnect call with `after=\u003ccursor of the last item you saw\u003e` (oldest first) and repeat until `next_cursor` is absent.",
         "operationId": "get-feed",
         "parameters": [
           {
-            "description": "Max items, newest first",
+            "description": "Page size",
             "explode": false,
             "in": "query",
             "name": "limit",
             "schema": {
               "default": 50,
-              "description": "Max items, newest first",
+              "description": "Page size",
               "format": "int64",
               "maximum": 200,
               "minimum": 1,
               "type": "integer"
+            }
+          },
+          {
+            "description": "Cursor: items OLDER than this position, newest first (scroll back)",
+            "explode": false,
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "description": "Cursor: items OLDER than this position, newest first (scroll back)",
+              "maxLength": 64,
+              "type": "string"
+            }
+          },
+          {
+            "description": "Cursor: items NEWER than this position, OLDEST first (catch-up after a reconnect); repeat with next_cursor until it is empty",
+            "explode": false,
+            "in": "query",
+            "name": "after",
+            "schema": {
+              "description": "Cursor: items NEWER than this position, OLDEST first (catch-up after a reconnect); repeat with next_cursor until it is empty",
+              "maxLength": 64,
+              "type": "string"
             }
           }
         ],

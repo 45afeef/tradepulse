@@ -53,6 +53,9 @@ Alert rules are structured data validated against the registry whitelist. Outbou
 ## Sessions and operations
 Access tokens are short (15 min); refresh tokens are single-use, hashed, rotated, and reuse revokes the family. Anything that must end sessions sets `users.sessions_valid_after` (exact, via the token's `ian`) and revokes refresh tokens. Metrics must never carry user-controlled label values. Deployment config lives in `deploy/` and `docs/DEPLOY.md`; new env vars go in `.env.example`, the service template and the config tests.
 
+## API contract rules (frozen candidate, see docs/API.md)
+Changes to `/api/v1` are additive only (new endpoints/fields/optional params). Lists that grow use `page` cursors; errors are problem+json; a new WebSocket message kind must be added to `delivery.MessageKinds` and `docs/WS.md` (tests enforce it). Note API-visible changes in `CHANGELOG.md`.
+
 ## API docs rule
 Every endpoint ships with documentation in the Huma registration (summary, description, tag, error codes) and field `doc`/`example` tags; `/docs` is the developer manual. `TestEveryOperationIsDocumented` fails otherwise. Update the overview in `internal/api/docs.go` when behavior visible to API users changes.
 

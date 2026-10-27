@@ -13,6 +13,7 @@ import (
 	"tradepulse/internal/domain/invite"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
+	"tradepulse/internal/page"
 )
 
 // record appends an audit entry (failures are logged, never shown to clients).
@@ -80,10 +81,14 @@ type userListOut struct{ Body userListBody }
 type userOut struct{ Body adminUser }
 
 type auditIn struct {
-	Limit int `query:"limit" default:"100" minimum:"1" maximum:"500" doc:"Max entries, newest first"`
+	Limit  int    `query:"limit" default:"100" minimum:"1" maximum:"500" doc:"Page size"`
+	Before string `query:"before" maxLength:"64" doc:"Cursor: entries older than this position (newest first)"`
+	After  string `query:"after" maxLength:"64" doc:"Cursor: entries newer than this position (oldest first)"`
 }
 type auditBody struct {
-	Entries []audit.Entry `json:"entries"`
+	Entries    []audit.Entry `json:"entries"`
+	NextCursor string        `json:"next_cursor,omitempty"`
+	Order      string        `json:"order" enum:"desc,asc"`
 }
 type auditOut struct{ Body auditBody }
 
@@ -199,9 +204,17 @@ func (s *Server) reactivateUser(ctx context.Context, in *idIn) (*userOut, error)
 }
 
 func (s *Server) listAudit(ctx context.Context, in *auditIn) (*auditOut, error) {
-	es, err := s.Audit.Recent(ctx, in.Limit)
+	q, err := page.Parse(in.Limit, 500, in.Before, in.After)
+	if err != nil {
+		return nil, huma.Error422UnprocessableEntity(err.Error())
+	}
+	es, err := s.Audit.Page(ctx, q)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("internal server error")
 	}
-	return &auditOut{Body: auditBody{Entries: es}}, nil
+	next := ""
+	if n := len(es); n > 0 {
+		next = page.NextCursor(q, n, es[n-1].Seq)
+	}
+	return &auditOut{Body: auditBody{Entries: es, NextCursor: next, Order: orderOf(q)}}, nil
 }

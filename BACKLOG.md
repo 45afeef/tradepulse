@@ -153,3 +153,12 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 
 ### TP-026 — Load test and restore drill (owner-run gates before inviting members)
 - Status: Ready · P0 · M6 · [ ] run `deploy/loadtest/k6.js` on staging and record results in `docs/LOADTEST.md`; [ ] perform the restore drill and record it in `docs/RUNBOOK.md`
+
+### TP-027 — API freeze: pagination, uniform errors, WS protocol, client guide (M7 backend half)
+- Status: Review (implemented in 0.9.0-dev; not yet confirmed by running) · P0 · M7
+- Acceptance: [x] cursor pagination on four lists; [x] uniform problem+json incl. unknown routes; [x] `docs/WS.md` + drift tests; [x] `docs/API.md` contract and `docs/CLIENT.md`; [x] CORS exposed headers; [x] version 1.0.0-rc.1; [ ] owner commits `openapi.json` and a frontend dev generates types from it without hand-edits
+- Deferred (not needed to start the frontend): `Idempotency-Key` for creates, session list endpoint, `Deprecation`/`Sunset` header middleware (policy only for now).
+
+### TP-028 — Frontend MVP (M7 second half)
+- Status: Proposed · P0 · M7 · Depends: TP-027 verified by the owner
+- Scope (from the brain §8): invite signup/login, live feed with views and "why this", subscriptions, alert builder with preview, channels, admin (sources + test, invites, users, audit). Mobile-first. Start only after the owner confirms the contract (`openapi.json`).

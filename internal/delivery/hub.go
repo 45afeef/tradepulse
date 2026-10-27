@@ -130,3 +130,7 @@ func (h *Hub) DisconnectUser(userID string) {
 		c.close()
 	}
 }
+
+// MessageKinds lists every WebSocket message type the server can send. docs/WS.md must
+// describe each one (enforced by a test), and every Notify call must use one of them.
+var MessageKinds = []string{"connected", "feed_item", "alert", "alert_paused", "channel_disabled"}

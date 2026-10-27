@@ -14,6 +14,7 @@ import (
 	"tradepulse/internal/domain/invite"
 	"tradepulse/internal/domain/sourcedef"
 	"tradepulse/internal/domain/user"
+	"tradepulse/internal/page"
 )
 
 type UserRepo struct {
@@ -120,6 +121,7 @@ func (r *UserRepo) List(_ context.Context) ([]user.User, error) {
 type FeedRepo struct {
 	mu    sync.RWMutex
 	max   int
+	seq   int64
 	items map[string][]feed.FeedItem
 }
 
@@ -127,15 +129,28 @@ func NewFeedRepo(maxPerUser int) *FeedRepo {
 	return &FeedRepo{max: maxPerUser, items: map[string][]feed.FeedItem{}}
 }
 
-func (r *FeedRepo) Add(_ context.Context, it feed.FeedItem) error {
+func (r *FeedRepo) Add(ctx context.Context, it feed.FeedItem) error {
+	_, err := r.AddItem(ctx, it)
+	return err
+}
+
+func (r *FeedRepo) AddItem(_ context.Context, it feed.FeedItem) (feed.FeedItem, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.seq++
+	it.Seq, it.Cursor = r.seq, page.Cursor(r.seq)
 	s := append(r.items[it.UserID], it)
 	if len(s) > r.max {
 		s = append([]feed.FeedItem(nil), s[len(s)-r.max:]...)
 	}
 	r.items[it.UserID] = s
-	return nil
+	return it, nil
+}
+
+func (r *FeedRepo) Page(_ context.Context, userID string, q page.Query) ([]feed.FeedItem, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return page.Select(r.items[userID], func(f feed.FeedItem) int64 { return f.Seq }, func(feed.FeedItem) bool { return true }, q), nil
 }
 
 func (r *FeedRepo) Recent(_ context.Context, userID string, limit int) ([]feed.FeedItem, error) {
@@ -229,6 +244,7 @@ func (r *InviteRepo) Release(_ context.Context, id, userID string) error {
 type AuditRepo struct {
 	mu      sync.Mutex
 	max     int
+	seq     int64
 	entries []audit.Entry
 }
 
@@ -237,6 +253,8 @@ func NewAuditRepo(max int) *AuditRepo { return &AuditRepo{max: max} }
 func (r *AuditRepo) Append(_ context.Context, e audit.Entry) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.seq++
+	e.Seq, e.Cursor = r.seq, page.Cursor(r.seq)
 	r.entries = append(r.entries, e)
 	if len(r.entries) > r.max {
 		r.entries = append([]audit.Entry(nil), r.entries[len(r.entries)-r.max:]...)
@@ -458,4 +476,10 @@ func (u *UsageRepo) Month(_ context.Context, key string, now time.Time) (int64, 
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return u.m[usageKey(key, now)], nil
+}
+
+func (r *AuditRepo) Page(_ context.Context, q page.Query) ([]audit.Entry, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return page.Select(r.entries, func(e audit.Entry) int64 { return e.Seq }, func(audit.Entry) bool { return true }, q), nil
 }

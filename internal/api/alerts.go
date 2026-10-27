@@ -13,6 +13,7 @@ import (
 	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/rule"
 	"tradepulse/internal/idgen"
+	"tradepulse/internal/page"
 	"tradepulse/internal/safefetch"
 )
 
@@ -83,11 +84,10 @@ type fromTemplateBody struct {
 type fromTemplateIn struct{ Body fromTemplateBody }
 type previewIn struct{ Body alert.Spec }
 type previewOut struct{ Body alert.Preview }
-type limitIn struct {
-	Limit int `query:"limit" default:"50" minimum:"1" maximum:"200" doc:"Max entries, newest first"`
-}
 type firesBody struct {
-	Fires []alert.Fire `json:"fires"`
+	Fires      []alert.Fire `json:"fires"`
+	NextCursor string       `json:"next_cursor,omitempty"`
+	Order      string       `json:"order" enum:"desc,asc"`
 }
 type firesOut struct{ Body firesBody }
 
@@ -211,12 +211,20 @@ func (s *Server) previewRule(ctx context.Context, in *previewIn) (*previewOut, e
 	return &previewOut{Body: s.Alerts.Preview(alert.Rule{ID: "preview", UserID: userID(ctx), Spec: sp})}, nil
 }
 
-func (s *Server) listFires(ctx context.Context, in *limitIn) (*firesOut, error) {
-	fs, err := s.AlertFires.Recent(ctx, userID(ctx), in.Limit)
+func (s *Server) listFires(ctx context.Context, in *pageIn) (*firesOut, error) {
+	q, err := page.Parse(in.Limit, 200, in.Before, in.After)
+	if err != nil {
+		return nil, huma.Error422UnprocessableEntity(err.Error())
+	}
+	fs, err := s.AlertFires.Page(ctx, userID(ctx), q)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("internal server error")
 	}
-	return &firesOut{Body: firesBody{Fires: fs}}, nil
+	next := ""
+	if n := len(fs); n > 0 {
+		next = page.NextCursor(q, n, fs[n-1].Seq)
+	}
+	return &firesOut{Body: firesBody{Fires: fs, NextCursor: next, Order: orderOf(q)}}, nil
 }
 
 // ---------------- channels ----------------
@@ -246,6 +254,8 @@ type channelListBody struct {
 type channelListOut struct{ Body channelListBody }
 type deliveriesBody struct {
 	Deliveries []alert.Delivery `json:"deliveries"`
+	NextCursor string           `json:"next_cursor,omitempty"`
+	Order      string           `json:"order" enum:"desc,asc"`
 }
 type deliveriesOut struct{ Body deliveriesBody }
 
@@ -394,10 +404,18 @@ func (s *Server) testChannel(ctx context.Context, in *idIn) (*testSentOut, error
 	return &testSentOut{Body: testSentBody{Queued: true}}, nil
 }
 
-func (s *Server) listDeliveries(ctx context.Context, in *limitIn) (*deliveriesOut, error) {
-	ds, err := s.Deliveries.Recent(ctx, userID(ctx), in.Limit)
+func (s *Server) listDeliveries(ctx context.Context, in *pageIn) (*deliveriesOut, error) {
+	q, err := page.Parse(in.Limit, 200, in.Before, in.After)
+	if err != nil {
+		return nil, huma.Error422UnprocessableEntity(err.Error())
+	}
+	ds, err := s.Deliveries.Page(ctx, userID(ctx), q)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("internal server error")
 	}
-	return &deliveriesOut{Body: deliveriesBody{Deliveries: ds}}, nil
+	next := ""
+	if n := len(ds); n > 0 {
+		next = page.NextCursor(q, n, ds[n-1].Seq)
+	}
+	return &deliveriesOut{Body: deliveriesBody{Deliveries: ds, NextCursor: next, Order: orderOf(q)}}, nil
 }

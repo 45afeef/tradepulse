@@ -231,10 +231,12 @@ func (e *Engine) Handle(ctx context.Context, ev event.Event) {
 				Entities: ev.Entities, Title: title, Body: body, URL: ev.URL, Severity: feed.Severity(sev),
 				Reason: reason, CreatedAt: time.Now().UTC(),
 			}
-			if err := e.feeds.Add(ctx, item); err != nil {
+			stored, err := e.feeds.AddItem(ctx, item)
+			if err != nil {
 				e.log.Error("persist feed item", "err", err)
+				stored = item
 			}
-			e.out.Deliver(ctx, item)
+			e.out.Deliver(ctx, stored)
 			break
 		}
 	}

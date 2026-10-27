@@ -110,7 +110,7 @@ func TestWebSocketEndToEnd(t *testing.T) {
 	ev.Title = "Breaking news: markets rally"
 	engine.Handle(context.Background(), ev)
 	_, p, err := readServerFrame(conn, br)
-	if err != nil || !strings.Contains(string(p), `"feed_item"`) || !strings.Contains(string(p), "Breaking news: markets rally") || !strings.Contains(string(p), "reason") {
+	if err != nil || !strings.Contains(string(p), `"feed_item"`) || !strings.Contains(string(p), "Breaking news: markets rally") || !strings.Contains(string(p), "reason") || !strings.Contains(string(p), `"cursor":"c1_`) {
 		t.Fatalf("expected feed_item, got %q %v", p, err)
 	}
 	if rec := do(h, "GET", "/api/v1/me/feed", member, ""); !strings.Contains(rec.Body.String(), "Breaking news: markets rally") {

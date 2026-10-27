@@ -15,6 +15,7 @@ import (
 
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/rule"
+	"tradepulse/internal/page"
 )
 
 const (
@@ -72,6 +73,8 @@ type Fire struct {
 	Entities []string  `json:"entities"`
 	Reason   string    `json:"reason" doc:"Why this alert fired (explainability)"`
 	FiredAt  time.Time `json:"fired_at"`
+	Seq      int64     `json:"-"`
+	Cursor   string    `json:"cursor" doc:"Opaque position; use as before/after"`
 }
 
 type Channel struct {
@@ -98,6 +101,8 @@ type Delivery struct {
 	Status    int       `json:"status,omitempty" doc:"HTTP status of the last attempt"`
 	Attempts  int       `json:"attempts"`
 	Error     string    `json:"error,omitempty"`
+	Seq       int64     `json:"-"`
+	Cursor    string    `json:"cursor" doc:"Opaque position; use as before/after"`
 }
 
 type RuleRepository interface {
@@ -114,6 +119,7 @@ type RuleRepository interface {
 type FireRepository interface {
 	Add(ctx context.Context, f Fire) error
 	Recent(ctx context.Context, userID string, limit int) ([]Fire, error)
+	Page(ctx context.Context, userID string, q page.Query) ([]Fire, error)
 	Prune(ctx context.Context, olderThan time.Time) (int64, error)
 }
 
@@ -133,6 +139,7 @@ type ChannelRepository interface {
 type DeliveryRepository interface {
 	Add(ctx context.Context, d Delivery) error
 	Recent(ctx context.Context, userID string, limit int) ([]Delivery, error)
+	Page(ctx context.Context, userID string, q page.Query) ([]Delivery, error)
 	Prune(ctx context.Context, olderThan time.Time) (int64, error)
 }
 

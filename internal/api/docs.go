@@ -61,6 +61,9 @@ An admin creates a source of type §webhook§; the response shows its **secret o
 - **token**: send the secret as §X-Webhook-Token§ or §Authorization: Bearer <secret>§ (for tools that cannot sign).
 - Responses: §201§ accepted, §200§ duplicate (same §id§ or same title+url: safe to retry), §401§ bad credentials (also for unknown sources), §413§ over 64 KB, §422§ invalid payload, §429§ rate limited, §503§ webhooks not enabled on the server. Details and code samples: §docs/WEBHOOKS.md§ in the repository.
 
+## Pagination
+Growing lists (feed, alert fires, deliveries, audit) are paged with opaque **cursors**. Responses contain §next_cursor§ and §order§. Scroll back: §?before=<next_cursor>§ (newest first). Catch up after a reconnect: §?after=<cursor of the last item you saw>§ returns the newer items **oldest first**; repeat with the new §next_cursor§ until it is absent. Every item has a §cursor§ (live WebSocket feed items too). Never parse cursors. Short, bounded lists (rules, channels, sources, members) are returned whole.
+
 ## Real-time (WebSocket)
 1. §POST /api/v1/ws-ticket§ (with your token) → a **one-time ticket valid for 30 seconds**.
 2. Connect to §ws(s)://<host>/ws?ticket=<ticket>§ (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.
@@ -74,7 +77,7 @@ An admin creates a source of type §webhook§; the response shows its **secret o
 The WebSocket cannot be tried from this page; use a client such as Postman or §websocat§.
 
 ## Errors
-Errors use **RFC 9457 problem JSON**: §{"title":"Unauthorized","status":401,"detail":"…"}§. Validation failures (422) list the offending fields.
+Every error, including unknown paths, uses **RFC 9457 problem JSON** (§Content-Type: application/problem+json§): §{"title":"Unauthorized","status":401,"detail":"…"}§. Responses carry §X-Request-ID§ (quote it when reporting problems) and rate-limit responses carry §Retry-After§. Validation failures (422) list the offending fields.
 Common codes: §401§ missing/invalid token · §403§ not allowed (e.g. not an admin, bad invite) · §409§ conflict · §422§ invalid input · §429§ rate limited · §413§ body too large.
 
 ## Administrators

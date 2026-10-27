@@ -6,6 +6,51 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.9.0-dev] — 2026-10-22 — M7 (backend half): API freeze candidate (TP-027)
+**Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox). Static pre-checks (imports, duplicate declarations, interface completeness) pass. Run `docker compose run --rm check`.
+**Suggested commit message:**
+```
+feat(m7): API freeze candidate: cursor pagination, uniform errors, WebSocket and client contracts
+
+- cursor pagination (before/after/next_cursor) for feed, alert fires, deliveries, audit; live feed items carry cursors; migration 0006 (seq columns)
+- every error (incl. unknown routes) is problem+json; CORS exposes X-Request-ID and Retry-After
+- docs/WS.md (protocol, reconnect/catch-up) with tests that fail on message-kind drift; docs/API.md contract and compatibility policy; docs/CLIENT.md
+- spec version 1.0.0-rc.1; oasdiff contract job in CI
+- 15 new tests (7 security)
+```
+
+### Why
+A frontend can only be built safely against a stable contract: scrolling and reconnect catch-up need cursors, error handling needs one shape, and live updates need a documented protocol (D-045...D-048).
+
+### Added
+- **`internal/page`**: opaque cursors (`c1_...`), `Parse`, `NextCursor`, generic in-memory `Select`.
+- **Pagination** for `GET /me/feed`, `/me/alerts/fires`, `/me/channels/deliveries`, `/admin/audit`: `limit`, `before` (newest first), `after` (oldest first, catch-up); responses add `order` and `next_cursor`; items add `cursor`. `feed.Repository.AddItem` returns the stored item with its cursor so WebSocket `feed_item` messages include it.
+- **Storage:** migration `0006_cursors` (`seq` on `audit_log` and `channel_deliveries`); `Page` on all four repositories (memory and Postgres).
+- **Errors:** catch-all JSON 404 for unknown paths/methods; every error is `application/problem+json`; CORS `Access-Control-Expose-Headers: X-Request-ID, Retry-After`.
+- **Docs:** `docs/WS.md`, `docs/API.md`, `docs/CLIENT.md`; overview sections "Pagination" and updated "Errors"; version `1.0.0-rc.1`.
+- **CI:** `contract` job (oasdiff against the base branch; advisory).
+- **Tests:** 15 new (see `TESTING.md`), including drift guards for WebSocket message kinds.
+
+### Changed (additive; one visible default)
+- List responses gain `order`, `next_cursor` and per-item `cursor`; request params `before`/`after` are new. Existing `limit` behavior is unchanged.
+- Unknown routes and wrong methods now return a JSON 404 (previously plain text 404/405).
+- `delivery.MessageKinds` declares the WebSocket message kinds.
+
+### Security notes
+Cursors are bounded, versioned, validated and per-resource (a cursor from another member's feed returns nothing because every query is user-scoped); error bodies never contain internals; the WebSocket contract is test-guarded.
+
+### Known limitations / open items
+- Not yet run by the owner (see verification note). `Idempotency-Key`, a session-list endpoint and `Deprecation`/`Sunset` header middleware are deferred.
+- The oasdiff job is advisory until `openapi.json` exists on the main branch.
+
+### Files (main)
+`internal/page/*` · `internal/domain/{feed,alert,audit}` · `internal/storage/{memory,postgres}` (+`migrations/0006_*`) · `internal/api/{handlers,alerts,admin,server,middleware,docs}.go` · `internal/delivery/hub.go` · `docs/{WS,API,CLIENT}.md` · `.github/workflows/ci.yaml` · tests
+
+### Next
+Owner `check` run and `openapi.json` commit; then the frontend (TP-028) against the contract.
+
+---
+
 ## [0.8.0-dev] — 2026-10-20 — M6: session hardening, operator metrics, Cloud Run deployment, runbook (TP-020, TP-024, TP-025, TP-026)
 **Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox); no new Go dependencies. Run `docker compose run --rm check` (Postgres integration tests included). The deploy workflow and service template cannot be exercised without a GCP project: first staging deploy is an owner gate.
 **Suggested commit message:**
