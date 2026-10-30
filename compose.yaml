@@ -54,7 +54,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/tradepulse?sslmode=disable}
       DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:-}
       DB_SIMPLE_PROTOCOL: ${DB_SIMPLE_PROTOCOL:-auto}
-      SIM_DEMO: market
+      SIM_DEMO: ${SIM_DEMO:-market}
       WEBHOOK_SIGNING_KEY: ${WEBHOOK_SIGNING_KEY:-dev-only-webhook-signing-key-0123456789abcdef}
       X_BEARER_TOKEN: ${X_BEARER_TOKEN:-}
       X_MONTHLY_BUDGET_USD: ${X_MONTHLY_BUDGET_USD:-20}

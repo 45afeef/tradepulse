@@ -6,6 +6,25 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.9.1-dev] — 2026-10-25 — Developer guide (the dev advocate and developer bible)
+**Verification:** documentation plus one drift test (`TestDeveloperGuideOnlyMentionsRealEndpointsAndFiles`), not run by the author (no Go toolchain). The guide's endpoints, request bodies, signature format, environment variables and file references were cross-checked against the code and configuration by script.
+**Suggested commit message:**
+```
+docs: add DEVELOPER_GUIDE (tracks for frontend, integrators, contributors, operators, security, dev advocate) with drift test
+
+- ordered, copy-paste steps per audience; mock-first and live paths; seed script; WebSocket client; troubleshooting; demo and workshop playbook
+- compose: SIM_DEMO now overridable from .env (was hard-coded)
+```
+### Added
+- `docs/DEVELOPER_GUIDE.md`: system in five minutes, track chooser, shared setup (bash and PowerShell helpers), Tracks A-H, endpoint-to-screen map, seed script, recipes, UI snippets, troubleshooting, learning path by level, rules of the road, Dev Advocate playbook (10-minute demo, 30-minute workshop, claims to avoid, metrics).
+- Test that fails when the guide names an endpoint or file that does not exist.
+### Changed
+- `compose.yaml`: `SIM_DEMO: ${SIM_DEMO:-market}` so the demo world can be switched from `.env` as the guide describes.
+### Next
+Unchanged: owner `check` run, `openapi.json`, owner gates, then saved views + feedback and the frontend.
+
+---
+
 ## [0.9.0-dev] — 2026-10-22 — M7 (backend half): API freeze candidate (TP-027)
 **Verification:** ⚠️ not compiled or run by the author (no Go toolchain in the sandbox). Static pre-checks (imports, duplicate declarations, interface completeness) pass. Run `docker compose run --rm check`.
 **Suggested commit message:**

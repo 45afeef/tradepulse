@@ -56,6 +56,9 @@ Access tokens are short (15 min); refresh tokens are single-use, hashed, rotated
 ## API contract rules (frozen candidate, see docs/API.md)
 Changes to `/api/v1` are additive only (new endpoints/fields/optional params). Lists that grow use `page` cursors; errors are problem+json; a new WebSocket message kind must be added to `delivery.MessageKinds` and `docs/WS.md` (tests enforce it). Note API-visible changes in `CHANGELOG.md`.
 
+## Developer guide rule
+`docs/DEVELOPER_GUIDE.md` is the onboarding bible. When an endpoint, command, env var or file it mentions changes, update it in the same change; `TestDeveloperGuideOnlyMentionsRealEndpointsAndFiles` fails on dead endpoint or file references.
+
 ## API docs rule
 Every endpoint ships with documentation in the Huma registration (summary, description, tag, error codes) and field `doc`/`example` tags; `/docs` is the developer manual. `TestEveryOperationIsDocumented` fails otherwise. Update the overview in `internal/api/docs.go` when behavior visible to API users changes.
 

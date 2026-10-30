@@ -162,3 +162,6 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 ### TP-028 — Frontend MVP (M7 second half)
 - Status: Proposed · P0 · M7 · Depends: TP-027 verified by the owner
 - Scope (from the brain §8): invite signup/login, live feed with views and "why this", subscriptions, alert builder with preview, channels, admin (sources + test, invites, users, audit). Mobile-first. Start only after the owner confirms the contract (`openapi.json`).
+
+### TP-029 — Developer guide (dev advocate and developer bible)
+- Status: Review (delivered in 0.9.1-dev) · P1 · M7 · [x] `docs/DEVELOPER_GUIDE.md` with tracks A-H and the dev advocate playbook; [x] drift test; [ ] a real frontend developer follows Track B/C/D cold and reports every point of confusion (fix the guide, not the developer)

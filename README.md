@@ -90,6 +90,9 @@ internal/storage/memory, internal/infrastructure/eventbus   replaceable implemen
 ### Database
 Dev uses the local `postgres` compose service automatically. To use a managed database (Supabase now, any provider later) set `DATABASE_URL` (and `DATABASE_MIGRATION_URL`) in `.env`: nothing else changes. Production **requires** `DATABASE_URL`. Details, Supabase setup and security notes: [`docs/DATABASE.md`](docs/DATABASE.md). Migrations run automatically at startup; `docker compose run --rm check` also runs the Postgres integration tests.
 
+### Start here (developers, dev advocates)
+**[`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md)**: ordered steps and commands for every audience: see it in 15 minutes, mock it, build a frontend on it, integrate webhooks, contribute, deploy, review security, run a demo.
+
 ### API contract and clients
 Compatibility policy, conventions, pagination and errors: [`docs/API.md`](docs/API.md) · WebSocket protocol: [`docs/WS.md`](docs/WS.md) · building a typed client: [`docs/CLIENT.md`](docs/CLIENT.md).
 

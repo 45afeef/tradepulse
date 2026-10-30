@@ -6,6 +6,7 @@
 - **Next action 1 (owner, most important):** unzip keeping your `go.mod`/`go.sum`; `docker compose run --rm check`; paste the failing lines only (the agent fixes until green; expect a few after this much unrun code). Then `docker compose run --rm openapi` and commit `openapi.json`.
 - **Next action 2 (owner gates before inviting members):** staging deploy (`docs/DEPLOY.md`), load test (`docs/LOADTEST.md`), restore drill (`docs/RUNBOOK.md`), enable the three news sources, try alerts + webhooks end to end.
 - **Then:** TP-028 frontend MVP, generated from `openapi.json` (`docs/CLIENT.md`). The backend contract is frozen except for bug fixes and additive changes (`docs/API.md`).
+- **Onboarding:** `docs/DEVELOPER_GUIDE.md` (0.9.1-dev) is the entry point for frontend developers, integrators and the dev advocate.
 - **Decisions in force:** D-021...D-048.
 
 | M | Name | Status | Exit criteria (summary) | Blocked by |
