@@ -72,7 +72,7 @@ func newServer(t *testing.T, mutate func(*config.Config)) (*Server, http.Handler
 		Connectors: connector.NewRegistry(conns...), Items: memory.NewItemStore(), Usage: usage,
 		Tickets: auth.NewTicketStore(time.Minute), Personalizer: nopPersonalizer{},
 		Hub: hub, Registry: reg, Alerts: engine, AlertRules: aRules, AlertFires: aFires, Channels: chans, Deliveries: dels,
-		Templates: alert.NewTemplates(), Outbound: out, Sessions: memory.NewSessionRepo(), Metrics: metrics.New(),
+		Templates: alert.NewTemplates(), Outbound: out, Sessions: memory.NewSessionRepo(), Views: memory.NewViewRepo(), Feedback: memory.NewFeedbackRepo(), Metrics: metrics.New(),
 	})
 	if err != nil {
 		t.Fatal(err)

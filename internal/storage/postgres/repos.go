@@ -314,3 +314,20 @@ func (r *FeedRepo) Page(ctx context.Context, userID string, q page.Query) ([]fee
 	}
 	return out, rows.Err()
 }
+
+func (r *FeedRepo) Get(ctx context.Context, userID, id string) (feed.FeedItem, error) {
+	var it feed.FeedItem
+	var ents []byte
+	var sev string
+	err := r.db.QueryRow(ctx,
+		`SELECT seq, id, user_id, event_id, event_type, source, entities, title, body, url, severity, reason, created_at FROM feed_items WHERE id = $1 AND user_id = $2`, id, userID).
+		Scan(&it.Seq, &it.ID, &it.UserID, &it.EventID, &it.EventType, &it.Source, &ents, &it.Title, &it.Body, &it.URL, &sev, &it.Reason, &it.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return it, feed.ErrNotFound
+	}
+	if err != nil {
+		return it, err
+	}
+	it.Severity, it.Cursor = feed.Severity(sev), page.Cursor(it.Seq)
+	return it, json.Unmarshal(ents, &it.Entities)
+}

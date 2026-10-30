@@ -165,3 +165,9 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 
 ### TP-029 — Developer guide (dev advocate and developer bible)
 - Status: Review (delivered in 0.9.1-dev) · P1 · M7 · [x] `docs/DEVELOPER_GUIDE.md` with tracks A-H and the dev advocate playbook; [x] drift test; [ ] a real frontend developer follows Track B/C/D cold and reports every point of confusion (fix the guide, not the developer)
+
+### TP-030 — Saved views (backend)
+- Status: Review (delivered in 0.10.0-dev; not yet confirmed by running) · P1 · M7 · [x] CRUD, limit 20, unique names, feed `?view=`, paging/catch-up through a view, isolation tests; [ ] owner confirms in /docs
+
+### TP-031 — Feedback and alert precision (backend)
+- Status: Review (delivered in 0.10.0-dev; not yet confirmed by running) · P0 · M7 (was listed under M5 in the brain and had been missed) · [x] rate/clear feed items and alerts, `feedback` on items, operator summary with precision per source/rule, metrics counter, 365-day retention; [ ] owner confirms in /docs; [ ] UI buttons (TP-028)

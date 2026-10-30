@@ -14,6 +14,7 @@ import (
 
 	"tradepulse/internal/config"
 	"tradepulse/internal/domain/alert"
+	"tradepulse/internal/domain/feed"
 )
 
 type titled struct {
@@ -68,19 +69,13 @@ func eq(a []string, b ...string) bool {
 }
 
 func TestFeedCursorPaginationAndCatchUp(t *testing.T) {
-	_, h := newServer(t, nil)
-	_, admin := adminToken(t)
+	s, h := newServer(t, nil)
 	tok, other := register(t, h, "p@example.com"), register(t, h, "other@example.com")
-	manualFeed(t, h, admin)
-	if rec := do(h, "PUT", "/api/v1/me/subscriptions", tok, `{"subscriptions":[{"kind":"source","value":"feed"}]}`); rec.Code != http.StatusOK {
-		t.Fatalf("subscribe: %d", rec.Code)
-	}
-	for i := 1; i <= 7; i++ {
-		postItem(t, h, admin, fmt.Sprintf("item %d", i))
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for len(getList(t, h, "/api/v1/me/feed?limit=200", tok).Items) < 7 && time.Now().Before(deadline) {
-		time.Sleep(15 * time.Millisecond)
+	uid := userOf(t, s, tok)
+	for i := 1; i <= 7; i++ { // seeded directly: this test is about paging, not about matching
+		if _, err := s.Feeds.AddItem(context.Background(), feed.FeedItem{ID: fmt.Sprint("fi", i), UserID: uid, Title: fmt.Sprintf("item %d", i), CreatedAt: time.Now()}); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	p1 := getList(t, h, "/api/v1/me/feed?limit=3", tok)

@@ -222,21 +222,6 @@ func (s *Server) listEventTypes(_ context.Context, _ *struct{}) (*eventTypesOut,
 	return &eventTypesOut{Body: eventTypesBody{Types: s.Registry.List(), BuiltinFields: event.BuiltinFieldDefs()}}, nil
 }
 
-func (s *Server) getFeed(ctx context.Context, in *pageIn) (*feedOut, error) {
-	q, err := page.Parse(in.Limit, 200, in.Before, in.After)
-	if err != nil {
-		return nil, huma.Error422UnprocessableEntity(err.Error())
-	}
-	items, err := s.Feeds.Page(ctx, userID(ctx), q)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("internal server error")
-	}
-	next := ""
-	if n := len(items); n > 0 {
-		next = page.NextCursor(q, n, items[n-1].Seq)
-	}
-	return &feedOut{Body: feedBody{Items: items, NextCursor: next, Order: orderOf(q)}}, nil
-}
 
 func (s *Server) wsTicket(ctx context.Context, _ *struct{}) (*ticketOut, error) {
 	t, err := s.Tickets.Issue(userID(ctx))

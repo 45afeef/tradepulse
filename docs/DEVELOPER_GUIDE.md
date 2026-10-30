@@ -159,13 +159,13 @@ Order of work (each step is a vertical slice you can demo):
 
 - [ ] 1. **Auth shell.** Login screen (`POST /api/v1/auth/login`), token store, refresh before expiry (`POST /api/v1/auth/refresh`), logout (`POST /api/v1/auth/logout`), logout everywhere (`POST /api/v1/me/logout-all`). Algorithm and code: `docs/CLIENT.md`. Access tokens last 15 minutes; refresh tokens are single use (use the *new* one every time).
 - [ ] 2. **Invite signup.** `POST /api/v1/auth/register` (email, password of at least 10 characters, invite code).
-- [ ] 3. **Feed.** `GET /api/v1/me/feed` with `limit` and `before=<next_cursor>` for infinite scroll. Show `title`, `body`, `source`, time, a "view original" link from `url`, and a "why am I seeing this" popover from `reason`.
+- [ ] 3. **Feed.** `GET /api/v1/me/feed` with `limit` and `before=<next_cursor>` for infinite scroll. Show `title`, `body`, `source`, time, a "view original" link from `url`, and a "why am I seeing this" popover from `reason`. Add 👍/👎 buttons: `POST /api/v1/me/feed/{id}/feedback` with `{"rating":"useful"}` or `"not_useful"` (and `DELETE /api/v1/me/feed/{id}/feedback` to undo); the member's own rating comes back as `feedback` on each item. Add **saved views**: `GET /api/v1/me/views`, `POST /api/v1/me/views`, `PUT /api/v1/me/views/{id}`, `DELETE /api/v1/me/views/{id}`, then list through one with `GET /api/v1/me/feed?view=<id>` (paging and catch-up work unchanged).
 - [ ] 4. **Live updates.** `POST /api/v1/ws-ticket` then `wss://.../ws?ticket=...`. On every (re)connect catch up with `GET /api/v1/me/feed?after=<last cursor>` until the page is empty, de-duplicate by `id`. Reference client in Section 6.
 - [ ] 5. **Subscriptions.** `GET /api/v1/me/subscriptions`, `PUT /api/v1/me/subscriptions` (send the complete list), pickers fed by `GET /api/v1/event-types` and `GET /api/v1/sources`.
-- [ ] 6. **Alerts.** `GET /api/v1/alert-templates` as the starting point, `POST /api/v1/me/alerts/from-template`, a rule builder with live **preview** (`POST /api/v1/me/alerts/preview`), list/edit/delete (`GET /api/v1/me/alerts`, `PUT /api/v1/me/alerts/{id}`, `DELETE /api/v1/me/alerts/{id}`), history (`GET /api/v1/me/alerts/fires`). Show `paused_reason` when the system paused a rule.
+- [ ] 6. **Alerts.** `GET /api/v1/alert-templates` as the starting point, `POST /api/v1/me/alerts/from-template`, a rule builder with live **preview** (`POST /api/v1/me/alerts/preview`), list/edit/delete (`GET /api/v1/me/alerts`, `PUT /api/v1/me/alerts/{id}`, `DELETE /api/v1/me/alerts/{id}`), history (`GET /api/v1/me/alerts/fires`), with 👍/👎 on each fired alert (`POST /api/v1/me/alerts/fires/{id}/feedback`, undo with `DELETE`). Show `paused_reason` when the system paused a rule.
 - [ ] 7. **Channels.** `POST /api/v1/me/channels` (show the secret once), `GET /api/v1/me/channels`, `POST /api/v1/me/channels/{id}/test`, `GET /api/v1/me/channels/deliveries`, `POST /api/v1/me/channels/{id}/enable`.
 - [ ] 8. **Account.** `POST /api/v1/me/password`.
-- [ ] 9. **Admin area** (role `admin`): invites (`POST /api/v1/admin/invites`, `GET /api/v1/admin/invites`), members (`GET /api/v1/admin/users`, suspend/reactivate/reset-password), sources with a **test-before-save** flow (`POST /api/v1/admin/sources/test`, then `POST /api/v1/admin/sources`), source health (`GET /api/v1/admin/sources`), audit (`GET /api/v1/admin/audit`), X spend (`GET /api/v1/admin/usage`).
+- [ ] 9. **Admin area** (role `admin`): invites (`POST /api/v1/admin/invites`, `GET /api/v1/admin/invites`), members (`GET /api/v1/admin/users`, suspend/reactivate/reset-password), sources with a **test-before-save** flow (`POST /api/v1/admin/sources/test`, then `POST /api/v1/admin/sources`), source health (`GET /api/v1/admin/sources`), audit (`GET /api/v1/admin/audit`), X spend (`GET /api/v1/admin/usage`), alert precision and noisy sources/rules (`GET /api/v1/admin/feedback/summary`).
 - [ ] 10. **Polish rules:** mobile first; show loading, empty and error states; for 429 honor `Retry-After`; never block the UI on the WebSocket; test the "server restarted" path (reconnect + catch-up).
 
 **Acceptance for the whole UI:** a newly invited user reaches a first useful alert in under 10 minutes.
@@ -240,15 +240,16 @@ Order of work (each step is a vertical slice you can demo):
 | Screen | Calls |
 |---|---|
 | Login / signup | `POST /api/v1/auth/login`, `POST /api/v1/auth/register`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout` |
-| Feed | `GET /api/v1/me/feed`, `POST /api/v1/ws-ticket`, WebSocket `/ws` |
+| Feed | `GET /api/v1/me/feed`, `POST /api/v1/ws-ticket`, WebSocket `/ws`, `POST /api/v1/me/feed/{id}/feedback`, `DELETE /api/v1/me/feed/{id}/feedback` |
+| Saved views | `GET /api/v1/me/views`, `POST /api/v1/me/views`, `PUT /api/v1/me/views/{id}`, `DELETE /api/v1/me/views/{id}`, then `GET /api/v1/me/feed?view=<id>` |
 | Subscriptions | `GET /api/v1/me/subscriptions`, `PUT /api/v1/me/subscriptions`, `GET /api/v1/event-types`, `GET /api/v1/sources` |
-| Alerts | `GET /api/v1/alert-templates`, `GET /api/v1/me/alerts`, `POST /api/v1/me/alerts`, `POST /api/v1/me/alerts/from-template`, `POST /api/v1/me/alerts/preview`, `GET /api/v1/me/alerts/fires` |
+| Alerts | `GET /api/v1/alert-templates`, `GET /api/v1/me/alerts`, `POST /api/v1/me/alerts`, `POST /api/v1/me/alerts/from-template`, `POST /api/v1/me/alerts/preview`, `GET /api/v1/me/alerts/fires`, `POST /api/v1/me/alerts/fires/{id}/feedback` |
 | Channels | `GET /api/v1/me/channels`, `POST /api/v1/me/channels`, `POST /api/v1/me/channels/{id}/test`, `GET /api/v1/me/channels/deliveries` |
 | Account | `POST /api/v1/me/password`, `POST /api/v1/me/logout-all` |
 | Admin: members | `GET /api/v1/admin/users`, `POST /api/v1/admin/users/{id}/suspend`, `POST /api/v1/admin/users/{id}/reactivate`, `POST /api/v1/admin/users/{id}/reset-password` |
 | Admin: invites | `POST /api/v1/admin/invites`, `GET /api/v1/admin/invites`, `DELETE /api/v1/admin/invites/{id}` |
 | Admin: sources | `GET /api/v1/admin/sources`, `POST /api/v1/admin/sources/test`, `POST /api/v1/admin/sources`, `PUT /api/v1/admin/sources/{id}`, `POST /api/v1/admin/sources/{id}/run`, `POST /api/v1/admin/sources/{id}/webhook-secret`, `POST /api/v1/admin/items` |
-| Admin: oversight | `GET /api/v1/admin/audit`, `GET /api/v1/admin/usage` |
+| Admin: oversight | `GET /api/v1/admin/audit`, `GET /api/v1/admin/usage`, `GET /api/v1/admin/feedback/summary` |
 
 ---
 
@@ -403,7 +404,7 @@ async function catchUp() {
 - Say: invite-only, explainable ("why am I seeing this"), spam-resistant (cooldown, preview, auto-pause), safe by design (SSRF guard, signed webhooks, row-level security), configurable per source.
 - Do not claim: real-time exchange data (licensing is the owner's call), end-user privacy compliance (deliberately deferred), multi-instance scale (single instance for 10 to 50 members), that X works without a paid token.
 
-**Metrics to track from day one** (from `PROJECT_BRAIN.md`): time to first useful alert (target under 10 minutes), alert usefulness rate (target over 70%, needs the feedback feature once the UI has it), weekly active members, source freshness.
+**Metrics to track from day one** (from `PROJECT_BRAIN.md`): time to first useful alert (target under 10 minutes), alert usefulness rate (target over 70%: `GET /api/v1/admin/feedback/summary` returns the precision once members rate alerts with 👍/👎), weekly active members, source freshness.
 
 **Feedback loop.** Collect: the command, the response, the `X-Request-ID`, and what the developer expected. Triage into `BACKLOG.md`; user-visible fixes go in `CHANGELOG.md`.
 

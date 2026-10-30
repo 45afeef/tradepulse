@@ -29,7 +29,11 @@ Growing lists (`/me/feed`, `/me/alerts/fires`, `/me/channels/deliveries`, `/admi
 - Default and `before=<cursor>`: **newest first**; `next_cursor` is the `before` value for the next (older) page.
 - `after=<cursor>`: **oldest first** (catch-up); `next_cursor` is the `after` value for the next (newer) page.
 - `next_cursor` is present whenever a page is full; the request that follows may return an empty page (and no cursor): that means you are done. `before` and `after` together are a 422.
-- Bounded collections (rules <= 50, channels <= 5, sources, members, invites, subscriptions) are returned whole.
+- Bounded collections (rules <= 50, channels <= 5, saved views <= 20, sources, members, invites, subscriptions) are returned whole.
+
+## Saved views and feedback
+- `GET /me/feed?view=<id>` returns the feed narrowed by a saved view (`/me/views`); paging and catch-up behave exactly as for the plain feed. A view only filters what the member already has.
+- Feed items and alert fires carry `feedback` (`useful` | `not_useful`, absent when unrated) with the member's own rating. Rating is idempotent (`POST .../feedback`), undo with `DELETE`. Operators read aggregates only (`GET /admin/feedback/summary`): precision per source and rule, never identities.
 
 ## Limits
 Per-IP request limits (429 + `Retry-After`), stricter on `/auth/*`; request bodies <= 64 KB (subscriptions 256 KB); webhook deliveries <= 64 KB and rate limited per source. See `docs/RUNBOOK.md`.

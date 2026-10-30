@@ -582,6 +582,10 @@
           "event_type": {
             "type": "string"
           },
+          "feedback": {
+            "description": "Your rating of this item: useful or not_useful (absent when unrated)",
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -617,6 +621,51 @@
         ],
         "type": "object"
       },
+      "FeedbackBody": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "description": "Optional comment (why it was not useful, for instance)",
+            "maxLength": 280,
+            "type": "string"
+          },
+          "rating": {
+            "enum": [
+              "useful",
+              "not_useful"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "rating"
+        ],
+        "type": "object"
+      },
+      "FeedbackView": {
+        "additionalProperties": false,
+        "properties": {
+          "note": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_id",
+          "rating",
+          "updated_at"
+        ],
+        "type": "object"
+      },
       "FieldDef": {
         "additionalProperties": false,
         "properties": {
@@ -634,6 +683,63 @@
           "name",
           "kind"
         ],
+        "type": "object"
+      },
+      "Filter": {
+        "additionalProperties": false,
+        "properties": {
+          "entities": {
+            "description": "Items about any of these topics",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "keywords": {
+            "description": "Whole words or phrases in the title or text",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "sources": {
+            "description": "Items from any of these sources",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "types": {
+            "description": "Event types (see GET /event-types)",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "within_hours": {
+            "description": "Only items from the last N hours",
+            "format": "int64",
+            "maximum": 720,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
         "type": "object"
       },
       "Fire": {
@@ -656,6 +762,10 @@
             ]
           },
           "event_id": {
+            "type": "string"
+          },
+          "feedback": {
+            "description": "Your rating of this alert: useful or not_useful (absent when unrated)",
             "type": "string"
           },
           "fired_at": {
@@ -774,6 +884,47 @@
         "required": [
           "template_id",
           "values"
+        ],
+        "type": "object"
+      },
+      "GroupView": {
+        "additionalProperties": false,
+        "properties": {
+          "group": {
+            "description": "source:\u003cname\u003e for feed items, rule:\u003cid\u003e for alerts",
+            "type": "string"
+          },
+          "label": {
+            "description": "Source name or alert rule name",
+            "type": "string"
+          },
+          "not_useful": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "precision": {
+            "description": "useful / (useful + not_useful)",
+            "format": "double",
+            "type": "number"
+          },
+          "target_type": {
+            "enum": [
+              "feed_item",
+              "alert_fire"
+            ],
+            "type": "string"
+          },
+          "useful": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "target_type",
+          "group",
+          "label",
+          "useful",
+          "not_useful"
         ],
         "type": "object"
       },
@@ -1136,6 +1287,81 @@
         },
         "required": [
           "rules"
+        ],
+        "type": "object"
+      },
+      "RuleSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "channels": {
+            "description": "'in_app' and/or ids of your channels (default: in_app)",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "conditions": {
+            "description": "All must hold",
+            "items": {
+              "$ref": "#/components/schemas/Condition"
+            },
+            "maxItems": 10,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "cooldown_seconds": {
+            "description": "Minimum seconds between two fires of this rule (default 300, minimum 10)",
+            "format": "int64",
+            "maximum": 86400,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enabled": {
+            "description": "Disabled rules never fire",
+            "type": "boolean"
+          },
+          "name": {
+            "examples": [
+              "Big movers"
+            ],
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "severity": {
+            "description": "Default notable",
+            "enum": [
+              "info",
+              "notable",
+              "high"
+            ],
+            "type": "string"
+          },
+          "types": {
+            "description": "Only these event types (empty = all)",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "scope",
+          "enabled"
         ],
         "type": "object"
       },
@@ -1563,81 +1789,6 @@
         ],
         "type": "object"
       },
-      "Spec": {
-        "additionalProperties": false,
-        "properties": {
-          "channels": {
-            "description": "'in_app' and/or ids of your channels (default: in_app)",
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 10,
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "conditions": {
-            "description": "All must hold",
-            "items": {
-              "$ref": "#/components/schemas/Condition"
-            },
-            "maxItems": 10,
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "cooldown_seconds": {
-            "description": "Minimum seconds between two fires of this rule (default 300, minimum 10)",
-            "format": "int64",
-            "maximum": 86400,
-            "minimum": 0,
-            "type": "integer"
-          },
-          "enabled": {
-            "description": "Disabled rules never fire",
-            "type": "boolean"
-          },
-          "name": {
-            "examples": [
-              "Big movers"
-            ],
-            "maxLength": 80,
-            "minLength": 1,
-            "type": "string"
-          },
-          "scope": {
-            "$ref": "#/components/schemas/Scope"
-          },
-          "severity": {
-            "description": "Default notable",
-            "enum": [
-              "info",
-              "notable",
-              "high"
-            ],
-            "type": "string"
-          },
-          "types": {
-            "description": "Only these event types (empty = all)",
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 20,
-            "type": [
-              "array",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "name",
-          "scope",
-          "enabled"
-        ],
-        "type": "object"
-      },
       "StatusBody": {
         "additionalProperties": false,
         "properties": {
@@ -1696,6 +1847,39 @@
         "required": [
           "kind",
           "value"
+        ],
+        "type": "object"
+      },
+      "SummaryBody": {
+        "additionalProperties": false,
+        "properties": {
+          "alert_fires": {
+            "$ref": "#/components/schemas/TotalsView",
+            "description": "alert_fires.precision is the alert-precision metric (target above 0.7)"
+          },
+          "days": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "feed_items": {
+            "$ref": "#/components/schemas/TotalsView"
+          },
+          "groups": {
+            "description": "The 20 most-rated sources and rules",
+            "items": {
+              "$ref": "#/components/schemas/GroupView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "days",
+          "feed_items",
+          "alert_fires",
+          "groups"
         ],
         "type": "object"
       },
@@ -1886,6 +2070,29 @@
         ],
         "type": "object"
       },
+      "TotalsView": {
+        "additionalProperties": false,
+        "properties": {
+          "not_useful": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "precision": {
+            "description": "useful / (useful + not_useful); absent when nothing was rated",
+            "format": "double",
+            "type": "number"
+          },
+          "useful": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "useful",
+          "not_useful"
+        ],
+        "type": "object"
+      },
       "TypeDef": {
         "additionalProperties": false,
         "properties": {
@@ -1977,6 +2184,75 @@
         },
         "required": [
           "users"
+        ],
+        "type": "object"
+      },
+      "ViewListBody": {
+        "additionalProperties": false,
+        "properties": {
+          "views": {
+            "items": {
+              "$ref": "#/components/schemas/ViewView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "views"
+        ],
+        "type": "object"
+      },
+      "ViewSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "name": {
+            "examples": [
+              "Market movers today"
+            ],
+            "maxLength": 60,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "filter"
+        ],
+        "type": "object"
+      },
+      "ViewView": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "filter": {
+            "$ref": "#/components/schemas/Filter"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "filter",
+          "created_at",
+          "updated_at"
         ],
         "type": "object"
       },
@@ -2073,7 +2349,7 @@
     }
   },
   "info": {
-    "description": "\n**TradePulse** collects information from many sources, normalizes it into *events*, and delivers\n**the items relevant to you** in one live feed, with automatic alerts. Access is **invite-only**.\n\n## Quick start (5 minutes)\n1. **Get an invite code** from an administrator (looks like `tp_inv_…`). Codes are single-use and expire.\n2. `POST /api/v1/auth/register` with your email, a password (10+ characters) and the invite code. The response contains a **token**.\n3. Click **Authorize** in this page (or send `Authorization: Bearer \u003ctoken\u003e` on every request).\n4. `GET /api/v1/event-types` shows what kinds of events exist and **which fields you can filter on**.\n5. `PUT /api/v1/me/subscriptions` tells the system what you care about (see *Subscriptions* below). **Until you subscribe, your feed is empty.**\n6. `GET /api/v1/me/feed` returns recent items. For live delivery: `POST /api/v1/ws-ticket`, then open the WebSocket (see *Real-time*).\n\n## Authentication\n- Register or log in to get a JWT; send it as `Authorization: Bearer \u003ctoken\u003e`.\n- Access tokens are short-lived (15 minutes by default, see `expires_in`). Keep the `refresh_token` and call `POST /api/v1/auth/refresh` before expiry: it returns a **new pair** and the old refresh token stops working (reusing an old one revokes the whole session). `POST /api/v1/auth/logout` ends a session, `POST /api/v1/me/logout-all` ends all of them, `POST /api/v1/me/password` changes your password (other sessions are signed out).\n- Repeated failed logins lock the account for a while (the same answer is given whether or not the account exists).\n- A **suspended** account is rejected everywhere immediately and its live connections are closed.\n- Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see `Retry-After`).\n\n## Subscriptions (what you receive)\nA subscription says *what to watch*; optional **types** and **conditions** narrow it. An item is delivered if **any** subscription matches, unless it is **muted**.\n\n| kind | matches when |\n|---|---|\n| `entity` | the event lists that entity (case-insensitive), e.g. `tcs`, `checkout` |\n| `keyword` | the whole word/phrase appears in the item's title or text, e.g. `repo rate` |\n| `source` | the event comes from that source id, e.g. `status_sim` |\n\n**Conditions** are `field operator value` checks; **all** must hold. Operators: `\u003e` `\u003e=` `\u003c` `\u003c=` `==` `!=` `in` `contains` `any_of`.\nFields come from `GET /api/v1/event-types` (built-in: `type`, `source`, `title`, `summary`, `url`, `entity`; plus each type's own fields).\nIf an event does not have the field, the condition is simply *false*.\n\nExample: notify me when *checkout* is anything other than up:\n```json\n{\"subscriptions\":[{\"kind\":\"entity\",\"value\":\"checkout\",\"conditions\":[{\"field\":\"status\",\"op\":\"!=\",\"value\":\"up\"}]}],\n \"muted\":[\"maintenance\"]}\n```\nEvery delivered item has a **reason** explaining which subscription matched.\n\n## Sources\nItems come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). `GET /api/v1/sources` lists the enabled ones: subscribe with kind `source` and the source's name, or with kind `entity` and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.\n\n## Alerts and channels\nThe feed shows everything that matches your subscriptions; **alerts** are the subset you must not miss, pushed to you immediately.\n1. `GET /api/v1/alert-templates` lists ready-made rules, or build your own: **scope** (entities / keywords / sources) + optional **types** and **conditions** (same fields as in subscriptions).\n2. `POST /api/v1/me/alerts/preview` replays recent events against your draft (\"would have fired 7 times\") before you save it. `POST /api/v1/me/alerts` (or `/from-template`) saves it.\n3. When a rule fires you get a live WebSocket message `{\"type\":\"alert\",\"data\":{...}}` (channel `in_app`) and/or a signed POST to your own HTTPS endpoint (`POST /api/v1/me/channels`; signed like inbound webhooks, retried, auto-disabled after repeated failures). Every fire has a **reason**; history: `GET /api/v1/me/alerts/fires`.\n4. Guardrails: per-rule **cooldown** (default 5 minutes), at most 50 rules and 5 channels per user, and a rule that fires too often in an hour is **paused automatically** (WebSocket message `alert_paused`, `paused_reason` on the rule). Re-enable it by saving it with `enabled: true` after tightening it.\n\n## Inbound webhooks (push items from your own systems)\nAn admin creates a source of type `webhook`; the response shows its **secret once** and its path (`/api/v1/hooks/\u003cname\u003e`). Then POST JSON from any system (n8n, Zapier, scripts):\n```json\n{\"id\":\"optional-unique-id\",\"title\":\"Required headline\",\"summary\":\"optional\",\"url\":\"https://example.com/story\",\"entities\":[\"topic\"],\"published_at\":\"2026-10-17T10:00:00Z\"}\n```\n- **hmac** (default): send `X-TP-Timestamp` (unix seconds, within 5 minutes) and `X-TP-Signature: sha256=\u003chex\u003e` where hex = HMAC-SHA256(secret, \"\u003ctimestamp\u003e.\u003craw body\u003e\").\n- **token**: send the secret as `X-Webhook-Token` or `Authorization: Bearer \u003csecret\u003e` (for tools that cannot sign).\n- Responses: `201` accepted, `200` duplicate (same `id` or same title+url: safe to retry), `401` bad credentials (also for unknown sources), `413` over 64 KB, `422` invalid payload, `429` rate limited, `503` webhooks not enabled on the server. Details and code samples: `docs/WEBHOOKS.md` in the repository.\n\n## Pagination\nGrowing lists (feed, alert fires, deliveries, audit) are paged with opaque **cursors**. Responses contain `next_cursor` and `order`. Scroll back: `?before=\u003cnext_cursor\u003e` (newest first). Catch up after a reconnect: `?after=\u003ccursor of the last item you saw\u003e` returns the newer items **oldest first**; repeat with the new `next_cursor` until it is absent. Every item has a `cursor` (live WebSocket feed items too). Never parse cursors. Short, bounded lists (rules, channels, sources, members) are returned whole.\n\n## Real-time (WebSocket)\n1. `POST /api/v1/ws-ticket` (with your token) → a **one-time ticket valid for 30 seconds**.\n2. Connect to `ws(s)://\u003chost\u003e/ws?ticket=\u003cticket\u003e` (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.\n3. Messages are JSON text frames:\n```json\n{\"type\":\"connected\"}\n{\"type\":\"feed_item\",\"data\":{\"id\":\"…\",\"title\":\"checkout is down\",\"body\":\"Latency 950 ms\",\"severity\":\"notable\",\"reason\":\"Matched your entity subscription \\\"checkout\\\"\",\"created_at\":\"…\"}}\n```\n4. **Reconnect with backoff** when the connection drops (deploys and idle limits close connections). After reconnecting, call `GET /api/v1/me/feed` to catch up on anything missed.\n5. Limits: at most 5 simultaneous connections per user; slow readers are disconnected. Close code 1008 = policy (cap/suspended), 1001 = server going away.\nThe WebSocket cannot be tried from this page; use a client such as Postman or `websocat`.\n\n## Errors\nEvery error, including unknown paths, uses **RFC 9457 problem JSON** (`Content-Type: application/problem+json`): `{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"…\"}`. Responses carry `X-Request-ID` (quote it when reporting problems) and rate-limit responses carry `Retry-After`. Validation failures (422) list the offending fields.\nCommon codes: `401` missing/invalid token · `403` not allowed (e.g. not an admin, bad invite) · `409` conflict · `422` invalid input · `429` rate limited · `413` body too large.\n\n## Administrators\nEndpoints under **admin** require the `admin` role (others get 403). Typical flow: create an invite → share the code → watch its status → suspend/reactivate members → review the audit log.\n",
+    "description": "\n**TradePulse** collects information from many sources, normalizes it into *events*, and delivers\n**the items relevant to you** in one live feed, with automatic alerts. Access is **invite-only**.\n\n## Quick start (5 minutes)\n1. **Get an invite code** from an administrator (looks like `tp_inv_…`). Codes are single-use and expire.\n2. `POST /api/v1/auth/register` with your email, a password (10+ characters) and the invite code. The response contains a **token**.\n3. Click **Authorize** in this page (or send `Authorization: Bearer \u003ctoken\u003e` on every request).\n4. `GET /api/v1/event-types` shows what kinds of events exist and **which fields you can filter on**.\n5. `PUT /api/v1/me/subscriptions` tells the system what you care about (see *Subscriptions* below). **Until you subscribe, your feed is empty.**\n6. `GET /api/v1/me/feed` returns recent items. For live delivery: `POST /api/v1/ws-ticket`, then open the WebSocket (see *Real-time*).\n\n## Authentication\n- Register or log in to get a JWT; send it as `Authorization: Bearer \u003ctoken\u003e`.\n- Access tokens are short-lived (15 minutes by default, see `expires_in`). Keep the `refresh_token` and call `POST /api/v1/auth/refresh` before expiry: it returns a **new pair** and the old refresh token stops working (reusing an old one revokes the whole session). `POST /api/v1/auth/logout` ends a session, `POST /api/v1/me/logout-all` ends all of them, `POST /api/v1/me/password` changes your password (other sessions are signed out).\n- Repeated failed logins lock the account for a while (the same answer is given whether or not the account exists).\n- A **suspended** account is rejected everywhere immediately and its live connections are closed.\n- Brute force is limited: authentication endpoints allow only a few attempts per minute per IP (HTTP 429, see `Retry-After`).\n\n## Subscriptions (what you receive)\nA subscription says *what to watch*; optional **types** and **conditions** narrow it. An item is delivered if **any** subscription matches, unless it is **muted**.\n\n| kind | matches when |\n|---|---|\n| `entity` | the event lists that entity (case-insensitive), e.g. `tcs`, `checkout` |\n| `keyword` | the whole word/phrase appears in the item's title or text, e.g. `repo rate` |\n| `source` | the event comes from that source id, e.g. `status_sim` |\n\n**Conditions** are `field operator value` checks; **all** must hold. Operators: `\u003e` `\u003e=` `\u003c` `\u003c=` `==` `!=` `in` `contains` `any_of`.\nFields come from `GET /api/v1/event-types` (built-in: `type`, `source`, `title`, `summary`, `url`, `entity`; plus each type's own fields).\nIf an event does not have the field, the condition is simply *false*.\n\nExample: notify me when *checkout* is anything other than up:\n```json\n{\"subscriptions\":[{\"kind\":\"entity\",\"value\":\"checkout\",\"conditions\":[{\"field\":\"status\",\"op\":\"!=\",\"value\":\"up\"}]}],\n \"muted\":[\"maintenance\"]}\n```\nEvery delivered item has a **reason** explaining which subscription matched.\n\n## Sources\nItems come from **sources** that administrators configure (RSS/Atom feeds, web pages read with CSS selectors, manual posts). `GET /api/v1/sources` lists the enabled ones: subscribe with kind `source` and the source's name, or with kind `entity` and one of its topics. Each source is polled on its own schedule; new items appear within one polling interval.\n\n## Alerts and channels\nThe feed shows everything that matches your subscriptions; **alerts** are the subset you must not miss, pushed to you immediately.\n1. `GET /api/v1/alert-templates` lists ready-made rules, or build your own: **scope** (entities / keywords / sources) + optional **types** and **conditions** (same fields as in subscriptions).\n2. `POST /api/v1/me/alerts/preview` replays recent events against your draft (\"would have fired 7 times\") before you save it. `POST /api/v1/me/alerts` (or `/from-template`) saves it.\n3. When a rule fires you get a live WebSocket message `{\"type\":\"alert\",\"data\":{...}}` (channel `in_app`) and/or a signed POST to your own HTTPS endpoint (`POST /api/v1/me/channels`; signed like inbound webhooks, retried, auto-disabled after repeated failures). Every fire has a **reason**; history: `GET /api/v1/me/alerts/fires`.\n4. Guardrails: per-rule **cooldown** (default 5 minutes), at most 50 rules and 5 channels per user, and a rule that fires too often in an hour is **paused automatically** (WebSocket message `alert_paused`, `paused_reason` on the rule). Re-enable it by saving it with `enabled: true` after tightening it.\n\n## Inbound webhooks (push items from your own systems)\nAn admin creates a source of type `webhook`; the response shows its **secret once** and its path (`/api/v1/hooks/\u003cname\u003e`). Then POST JSON from any system (n8n, Zapier, scripts):\n```json\n{\"id\":\"optional-unique-id\",\"title\":\"Required headline\",\"summary\":\"optional\",\"url\":\"https://example.com/story\",\"entities\":[\"topic\"],\"published_at\":\"2026-10-17T10:00:00Z\"}\n```\n- **hmac** (default): send `X-TP-Timestamp` (unix seconds, within 5 minutes) and `X-TP-Signature: sha256=\u003chex\u003e` where hex = HMAC-SHA256(secret, \"\u003ctimestamp\u003e.\u003craw body\u003e\").\n- **token**: send the secret as `X-Webhook-Token` or `Authorization: Bearer \u003csecret\u003e` (for tools that cannot sign).\n- Responses: `201` accepted, `200` duplicate (same `id` or same title+url: safe to retry), `401` bad credentials (also for unknown sources), `413` over 64 KB, `422` invalid payload, `429` rate limited, `503` webhooks not enabled on the server. Details and code samples: `docs/WEBHOOKS.md` in the repository.\n\n## Saved views and feedback\n**Views** (`/me/views`) are named filters over your feed (sources, topics, keywords, event types, time window): create one, then list the feed through it with `GET /me/feed?view=\u003cid\u003e` (paging works as usual). **Feedback**: rate a feed item (`POST /me/feed/{id}/feedback`) or an alert that fired (`POST /me/alerts/fires/{id}/feedback`) as `useful` or `not_useful`; your rating comes back as `feedback` on the item. Ratings tell the operators which sources and rules are noisy (alert precision is the share rated useful).\n\n## Pagination\nGrowing lists (feed, alert fires, deliveries, audit) are paged with opaque **cursors**. Responses contain `next_cursor` and `order`. Scroll back: `?before=\u003cnext_cursor\u003e` (newest first). Catch up after a reconnect: `?after=\u003ccursor of the last item you saw\u003e` returns the newer items **oldest first**; repeat with the new `next_cursor` until it is absent. Every item has a `cursor` (live WebSocket feed items too). Never parse cursors. Short, bounded lists (rules, channels, sources, members) are returned whole.\n\n## Real-time (WebSocket)\n1. `POST /api/v1/ws-ticket` (with your token) → a **one-time ticket valid for 30 seconds**.\n2. Connect to `ws(s)://\u003chost\u003e/ws?ticket=\u003cticket\u003e` (browsers cannot set headers on WebSockets, hence the ticket). A new ticket is needed for every connection.\n3. Messages are JSON text frames:\n```json\n{\"type\":\"connected\"}\n{\"type\":\"feed_item\",\"data\":{\"id\":\"…\",\"title\":\"checkout is down\",\"body\":\"Latency 950 ms\",\"severity\":\"notable\",\"reason\":\"Matched your entity subscription \\\"checkout\\\"\",\"created_at\":\"…\"}}\n```\n4. **Reconnect with backoff** when the connection drops (deploys and idle limits close connections). After reconnecting, call `GET /api/v1/me/feed` to catch up on anything missed.\n5. Limits: at most 5 simultaneous connections per user; slow readers are disconnected. Close code 1008 = policy (cap/suspended), 1001 = server going away.\nThe WebSocket cannot be tried from this page; use a client such as Postman or `websocat`.\n\n## Errors\nEvery error, including unknown paths, uses **RFC 9457 problem JSON** (`Content-Type: application/problem+json`): `{\"title\":\"Unauthorized\",\"status\":401,\"detail\":\"…\"}`. Responses carry `X-Request-ID` (quote it when reporting problems) and rate-limit responses carry `Retry-After`. Validation failures (422) list the offending fields.\nCommon codes: `401` missing/invalid token · `403` not allowed (e.g. not an admin, bad invite) · `409` conflict · `422` invalid input · `429` rate limited · `413` body too large.\n\n## Administrators\nEndpoints under **admin** require the `admin` role (others get 403). Typical flow: create an invite → share the code → watch its status → suspend/reactivate members → review the audit log.\n",
     "title": "TradePulse API",
     "version": "1.0.0-rc.1"
   },
@@ -2179,6 +2455,89 @@
           }
         ],
         "summary": "Audit log",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/feedback/summary": {
+      "get": {
+        "description": "Totals of useful / not useful ratings for feed items and alerts in the last `days`, the precision (useful share), and the most-rated sources and alert rules. Contains no member identities.",
+        "operationId": "feedback-summary",
+        "parameters": [
+          {
+            "description": "Look-back window in days",
+            "explode": false,
+            "in": "query",
+            "name": "days",
+            "schema": {
+              "default": 30,
+              "description": "Look-back window in days",
+              "format": "int64",
+              "maximum": 365,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Feedback and alert precision",
         "tags": [
           "admin"
         ]
@@ -4024,7 +4383,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Spec"
+                "$ref": "#/components/schemas/RuleSpec"
               }
             }
           },
@@ -4188,6 +4547,155 @@
         ]
       }
     },
+    "/api/v1/me/alerts/fires/{id}/feedback": {
+      "delete": {
+        "description": "Always 204, also when there was no rating. Only affects your own rating.",
+        "operationId": "clear-alert-feedback",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove my rating of an alert",
+        "tags": [
+          "alerts"
+        ]
+      },
+      "post": {
+        "description": "Idempotent. This is how alert precision is measured, so rate the alerts that were noise. Only your own alerts (404 otherwise).",
+        "operationId": "rate-alert",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rate an alert that fired (useful / not useful)",
+        "tags": [
+          "alerts"
+        ]
+      }
+    },
     "/api/v1/me/alerts/from-template": {
       "post": {
         "description": "Pick a template id from `GET /alert-templates` and give the values to watch; everything else comes pre-filled. Edit the rule afterwards to tweak it.",
@@ -4283,7 +4791,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Spec"
+                "$ref": "#/components/schemas/RuleSpec"
               }
             }
           },
@@ -4510,7 +5018,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Spec"
+                "$ref": "#/components/schemas/RuleSpec"
               }
             }
           },
@@ -5159,6 +5667,17 @@
               "maxLength": 64,
               "type": "string"
             }
+          },
+          {
+            "description": "Id of a saved view (GET /me/views): only items matching it. Paging works the same.",
+            "explode": false,
+            "in": "query",
+            "name": "view",
+            "schema": {
+              "description": "Id of a saved view (GET /me/views): only items matching it. Paging works the same.",
+              "maxLength": 64,
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -5209,6 +5728,155 @@
           }
         ],
         "summary": "Recent feed items (newest first)",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/feed/{id}/feedback": {
+      "delete": {
+        "description": "Always 204, also when there was no rating.",
+        "operationId": "clear-feed-item-feedback",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove my rating of a feed item",
+        "tags": [
+          "me"
+        ]
+      },
+      "post": {
+        "description": "Idempotent: rating again replaces your earlier rating. Only your own feed items can be rated (404 otherwise). Ratings measure how relevant sources are; the rating is also returned as `feedback` when listing the feed.",
+        "operationId": "rate-feed-item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rate a feed item (useful / not useful)",
         "tags": [
           "me"
         ]
@@ -5448,6 +6116,297 @@
           }
         ],
         "summary": "Replace my subscriptions and mutes",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/views": {
+      "get": {
+        "description": "Saved views are named filters over your feed (sources, topics, keywords, event types, time window). Use one with `GET /me/feed?view=\u003cid\u003e`. At most 20; returned whole.",
+        "operationId": "list-views",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewListBody"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "My saved views",
+        "tags": [
+          "me"
+        ]
+      },
+      "post": {
+        "description": "All given criteria must match; within one list any value matches. Names are unique per member (case-insensitive). A view only narrows what is already in your feed; it does not change what you receive.",
+        "operationId": "create-view",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ViewSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewView"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save a view",
+        "tags": [
+          "me"
+        ]
+      }
+    },
+    "/api/v1/me/views/{id}": {
+      "delete": {
+        "description": "Deletes the view only, never feed items.",
+        "operationId": "delete-view",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a saved view",
+        "tags": [
+          "me"
+        ]
+      },
+      "put": {
+        "description": "Send the full view. Only your own views are accessible (404 otherwise).",
+        "operationId": "update-view",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ViewSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorModel"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace a saved view",
         "tags": [
           "me"
         ]

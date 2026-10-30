@@ -75,6 +75,7 @@ type Fire struct {
 	FiredAt  time.Time `json:"fired_at"`
 	Seq      int64     `json:"-"`
 	Cursor   string    `json:"cursor" doc:"Opaque position; use as before/after"`
+	Feedback string    `json:"feedback,omitempty" doc:"Your rating of this alert: useful or not_useful (absent when unrated)"`
 }
 
 type Channel struct {
@@ -120,6 +121,7 @@ type FireRepository interface {
 	Add(ctx context.Context, f Fire) error
 	Recent(ctx context.Context, userID string, limit int) ([]Fire, error)
 	Page(ctx context.Context, userID string, q page.Query) ([]Fire, error)
+	Get(ctx context.Context, userID, id string) (Fire, error)
 	Prune(ctx context.Context, olderThan time.Time) (int64, error)
 }
 

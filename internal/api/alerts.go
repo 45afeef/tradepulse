@@ -220,6 +220,7 @@ func (s *Server) listFires(ctx context.Context, in *pageIn) (*firesOut, error) {
 	if err != nil {
 		return nil, huma.Error500InternalServerError("internal server error")
 	}
+	s.rateFires(ctx, userID(ctx), fs)
 	next := ""
 	if n := len(fs); n > 0 {
 		next = page.NextCursor(q, n, fs[n-1].Seq)

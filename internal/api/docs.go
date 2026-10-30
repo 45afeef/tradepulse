@@ -61,6 +61,9 @@ An admin creates a source of type §webhook§; the response shows its **secret o
 - **token**: send the secret as §X-Webhook-Token§ or §Authorization: Bearer <secret>§ (for tools that cannot sign).
 - Responses: §201§ accepted, §200§ duplicate (same §id§ or same title+url: safe to retry), §401§ bad credentials (also for unknown sources), §413§ over 64 KB, §422§ invalid payload, §429§ rate limited, §503§ webhooks not enabled on the server. Details and code samples: §docs/WEBHOOKS.md§ in the repository.
 
+## Saved views and feedback
+**Views** (§/me/views§) are named filters over your feed (sources, topics, keywords, event types, time window): create one, then list the feed through it with §GET /me/feed?view=<id>§ (paging works as usual). **Feedback**: rate a feed item (§POST /me/feed/{id}/feedback§) or an alert that fired (§POST /me/alerts/fires/{id}/feedback§) as §useful§ or §not_useful§; your rating comes back as §feedback§ on the item. Ratings tell the operators which sources and rules are noisy (alert precision is the share rated useful).
+
 ## Pagination
 Growing lists (feed, alert fires, deliveries, audit) are paged with opaque **cursors**. Responses contain §next_cursor§ and §order§. Scroll back: §?before=<next_cursor>§ (newest first). Catch up after a reconnect: §?after=<cursor of the last item you saw>§ returns the newer items **oldest first**; repeat with the new §next_cursor§ until it is absent. Every item has a §cursor§ (live WebSocket feed items too). Never parse cursors. Short, bounded lists (rules, channels, sources, members) are returned whole.
 

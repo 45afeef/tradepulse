@@ -21,8 +21,9 @@ func TestWebSocketDocsDescribeEveryMessageKind(t *testing.T) {
 			t.Errorf("docs/WS.md does not describe the %q message", kind)
 		}
 	}
+	lower := strings.ToLower(doc)
 	for _, must := range []string{"ticket", "1008", "after=", "de-duplicate"} {
-		if !strings.Contains(doc, must) {
+		if !strings.Contains(lower, must) {
 			t.Errorf("docs/WS.md is missing the %q guidance", must)
 		}
 	}

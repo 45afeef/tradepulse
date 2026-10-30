@@ -401,3 +401,14 @@ func (r *DeliveryRepo) Page(_ context.Context, userID string, q page.Query) ([]a
 	defer r.mu.Unlock()
 	return page.Select(r.ds, func(d alert.Delivery) int64 { return d.Seq }, func(d alert.Delivery) bool { return d.UserID == userID }, q), nil
 }
+
+func (r *AlertFireRepo) Get(_ context.Context, userID, id string) (alert.Fire, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := len(r.fires) - 1; i >= 0; i-- {
+		if r.fires[i].ID == id && r.fires[i].UserID == userID {
+			return r.fires[i], nil
+		}
+	}
+	return alert.Fire{}, alert.ErrNotFound
+}

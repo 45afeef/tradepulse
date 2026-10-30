@@ -74,7 +74,7 @@ func TestCursorPaginationAcrossAllFourRepositories(t *testing.T) {
 		t.Fatalf("catch-up: %+v %v", asc, err)
 	}
 	fa, _ := fires.Page(ctx, alice.ID, page.Query{Limit: 2, After: fireAll[3].Seq})
-	if len(fa) != 2 || fa[0].Title != "4" || fa[1].Title != "5" {
+	if len(fa) != 2 || fa[0].Title != "5" || fa[1].Title != "6" { // fireAll[3] is item "4": catch-up starts right after it
 		t.Fatalf("fires catch-up: %+v", fa)
 	}
 	if rec, _ := feeds.Recent(ctx, alice.ID, 2); len(rec) != 2 || rec[0].Seq <= rec[1].Seq || rec[0].Cursor == "" {

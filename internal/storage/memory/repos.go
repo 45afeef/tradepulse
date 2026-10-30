@@ -483,3 +483,14 @@ func (r *AuditRepo) Page(_ context.Context, q page.Query) ([]audit.Entry, error)
 	defer r.mu.Unlock()
 	return page.Select(r.entries, func(e audit.Entry) int64 { return e.Seq }, func(audit.Entry) bool { return true }, q), nil
 }
+
+func (r *FeedRepo) Get(_ context.Context, userID, id string) (feed.FeedItem, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, it := range r.items[userID] {
+		if it.ID == id {
+			return it, nil
+		}
+	}
+	return feed.FeedItem{}, feed.ErrNotFound
+}

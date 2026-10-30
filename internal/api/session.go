@@ -177,6 +177,7 @@ func (s *Server) RegisterMetrics(busDropped func() uint64) {
 	m.Describe("alert_rules_auto_paused_total", "counter", "Alert rules paused for firing too often")
 	m.Describe("outbound_deliveries_total", "counter", "Outbound webhook deliveries by result")
 	m.Describe("source_runs_total", "counter", "Source fetch runs by result")
+	m.Describe("feedback_total", "counter", "Useful / not useful ratings by target and rating")
 	if s.Hub != nil {
 		m.GaugeFunc("ws_connections", "Live WebSocket connections", func() []metrics.Sample {
 			return []metrics.Sample{{Value: float64(s.Hub.Count())}}

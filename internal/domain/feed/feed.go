@@ -3,6 +3,7 @@ package feed
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"tradepulse/internal/page"
@@ -31,12 +32,17 @@ type FeedItem struct {
 	CreatedAt time.Time `json:"created_at"`
 	Seq       int64     `json:"-"`
 	Cursor    string    `json:"cursor" doc:"Opaque position in your feed; use as before/after"`
+	Feedback  string    `json:"feedback,omitempty" doc:"Your rating of this item: useful or not_useful (absent when unrated)"`
 }
+
+var ErrNotFound = errors.New("feed item not found")
 
 type Repository interface {
 	Add(ctx context.Context, item FeedItem) error
 	// AddItem stores the item and returns it with its Seq/Cursor assigned.
 	AddItem(ctx context.Context, item FeedItem) (FeedItem, error)
+	// Get returns one of the user's items (ErrNotFound otherwise, also for other users' items).
+	Get(ctx context.Context, userID, id string) (FeedItem, error)
 	// Page lists ONE user's items per the cursor query (see package page).
 	Page(ctx context.Context, userID string, q page.Query) ([]FeedItem, error)
 	// Recent returns the newest items first, for ONE user.

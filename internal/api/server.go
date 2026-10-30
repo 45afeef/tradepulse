@@ -2,6 +2,7 @@
 package api
 
 import (
+	"reflect"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -21,7 +22,9 @@ import (
 	"tradepulse/internal/domain/event"
 	"tradepulse/internal/domain/feed"
 	"tradepulse/internal/domain/invite"
+	"tradepulse/internal/domain/feedback"
 	"tradepulse/internal/domain/session"
+	"tradepulse/internal/domain/view"
 	"tradepulse/internal/domain/sourcedef"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/idgen"
@@ -59,6 +62,8 @@ type Deps struct {
 	Templates    *alert.Templates
 	Outbound     Outbound
 	Sessions     session.Repository
+	Views        view.Repository
+	Feedback     feedback.Repository
 	Metrics      *metrics.Registry
 	Usage        sourcedef.UsageStore
 	// Ready (optional) checks dependencies for /readyz, e.g. the database ping.
@@ -102,6 +107,7 @@ func (s *Server) Run(ctx context.Context) {
 // description, tag and the error codes it can return (docs_test.go enforces this).
 func (s *Server) routes(mux *http.ServeMux) huma.API {
 	cfg := huma.DefaultConfig("TradePulse API", "1.0.0-rc.1")
+	cfg.Components.Schemas = huma.NewMapRegistry("#/components/schemas/", schemaName)
 	cfg.CreateHooks = nil // no "$schema" fields in responses
 	cfg.Info.Description = overview
 	cfg.Components.SecuritySchemes = map[string]*huma.SecurityScheme{
@@ -300,6 +306,30 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 	huma.Register(api, huma.Operation{OperationID: "reset-user-password", Method: http.MethodPost, Path: "/api/v1/admin/users/{id}/reset-password", Tags: []string{"admin"},
 		Summary: "Reset a member's password", Security: secured, Middlewares: admin,
 		Description: "Generates a temporary password, **shown once** in the response; the member's sessions are signed out immediately. Hand it over securely and ask the member to change it (`POST /me/password`).", Errors: []int{401, 403, 404}}, s.resetPassword)
+	huma.Register(api, huma.Operation{OperationID: "list-views", Method: http.MethodGet, Path: "/api/v1/me/views", Tags: []string{"me"},
+		Summary: "My saved views", Security: secured, Middlewares: member,
+		Description: "Saved views are named filters over your feed (sources, topics, keywords, event types, time window). Use one with `GET /me/feed?view=<id>`. At most 20; returned whole.", Errors: []int{401}}, s.listViews)
+	huma.Register(api, huma.Operation{OperationID: "create-view", Method: http.MethodPost, Path: "/api/v1/me/views", Tags: []string{"me"},
+		Summary: "Save a view", Security: secured, Middlewares: member, DefaultStatus: http.StatusCreated, MaxBodyBytes: 64 << 10,
+		Description: "All given criteria must match; within one list any value matches. Names are unique per member (case-insensitive). A view only narrows what is already in your feed; it does not change what you receive.", Errors: []int{401, 409, 422}}, s.createView)
+	huma.Register(api, huma.Operation{OperationID: "update-view", Method: http.MethodPut, Path: "/api/v1/me/views/{id}", Tags: []string{"me"},
+		Summary: "Replace a saved view", Security: secured, Middlewares: member, MaxBodyBytes: 64 << 10,
+		Description: "Send the full view. Only your own views are accessible (404 otherwise).", Errors: []int{401, 404, 409, 422}}, s.updateView)
+	huma.Register(api, huma.Operation{OperationID: "delete-view", Method: http.MethodDelete, Path: "/api/v1/me/views/{id}", Tags: []string{"me"},
+		Summary: "Delete a saved view", Security: secured, Middlewares: member, DefaultStatus: http.StatusNoContent, Description: "Deletes the view only, never feed items.", Errors: []int{401, 404}}, s.deleteView)
+	huma.Register(api, huma.Operation{OperationID: "rate-feed-item", Method: http.MethodPost, Path: "/api/v1/me/feed/{id}/feedback", Tags: []string{"me"},
+		Summary: "Rate a feed item (useful / not useful)", Security: secured, Middlewares: member, MaxBodyBytes: 16 << 10,
+		Description: "Idempotent: rating again replaces your earlier rating. Only your own feed items can be rated (404 otherwise). Ratings measure how relevant sources are; the rating is also returned as `feedback` when listing the feed.", Errors: []int{401, 404, 422}}, s.rateFeedItem)
+	huma.Register(api, huma.Operation{OperationID: "clear-feed-item-feedback", Method: http.MethodDelete, Path: "/api/v1/me/feed/{id}/feedback", Tags: []string{"me"},
+		Summary: "Remove my rating of a feed item", Security: secured, Middlewares: member, DefaultStatus: http.StatusNoContent, Description: "Always 204, also when there was no rating.", Errors: []int{401}}, s.clearFeedItemFeedback)
+	huma.Register(api, huma.Operation{OperationID: "rate-alert", Method: http.MethodPost, Path: "/api/v1/me/alerts/fires/{id}/feedback", Tags: []string{"alerts"},
+		Summary: "Rate an alert that fired (useful / not useful)", Security: secured, Middlewares: member, MaxBodyBytes: 16 << 10,
+		Description: "Idempotent. This is how alert precision is measured, so rate the alerts that were noise. Only your own alerts (404 otherwise).", Errors: []int{401, 404, 422}}, s.rateAlertFire)
+	huma.Register(api, huma.Operation{OperationID: "clear-alert-feedback", Method: http.MethodDelete, Path: "/api/v1/me/alerts/fires/{id}/feedback", Tags: []string{"alerts"},
+		Summary: "Remove my rating of an alert", Security: secured, Middlewares: member, DefaultStatus: http.StatusNoContent, Description: "Always 204, also when there was no rating. Only affects your own rating.", Errors: []int{401}}, s.clearAlertFireFeedback)
+	huma.Register(api, huma.Operation{OperationID: "feedback-summary", Method: http.MethodGet, Path: "/api/v1/admin/feedback/summary", Tags: []string{"admin"},
+		Summary: "Feedback and alert precision", Security: secured, Middlewares: admin,
+		Description: "Totals of useful / not useful ratings for feed items and alerts in the last `days`, the precision (useful share), and the most-rated sources and alert rules. Contains no member identities.", Errors: []int{401, 403}}, s.feedbackSummary)
 	return api
 }
 
@@ -330,4 +360,18 @@ func OpenAPISpec() ([]byte, error) {
 
 func (s *Server) notFound(w http.ResponseWriter, _ *http.Request) {
 	writeError(w, http.StatusNotFound, "not_found", "no such endpoint")
+}
+
+// Huma names OpenAPI schemas after the bare Go type name and panics when two different types share
+// one. Types that would collide get an explicit, descriptive schema name here.
+var schemaNames = map[string]string{
+	"tradepulse/internal/domain/alert.Spec": "RuleSpec",
+	"tradepulse/internal/domain/view.Spec":  "ViewSpec",
+}
+
+func schemaName(t reflect.Type, hint string) string {
+	if n, ok := schemaNames[t.PkgPath()+"."+t.Name()]; ok {
+		return n
+	}
+	return huma.DefaultSchemaNamer(t, hint)
 }

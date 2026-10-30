@@ -25,8 +25,10 @@ import (
 	"tradepulse/internal/domain/alert"
 	"tradepulse/internal/domain/audit"
 	"tradepulse/internal/domain/feed"
+	"tradepulse/internal/domain/feedback"
 	"tradepulse/internal/domain/invite"
 	"tradepulse/internal/domain/session"
+	"tradepulse/internal/domain/view"
 	"tradepulse/internal/domain/sourcedef"
 	"tradepulse/internal/domain/user"
 	"tradepulse/internal/domain/event"
@@ -80,6 +82,8 @@ func run() error {
 		chans   alert.ChannelRepository
 		dels    alert.DeliveryRepository
 		sessions session.Repository
+		views    view.Repository
+		fbk      feedback.Repository
 		ready   func(context.Context) error
 	)
 	if cfg.DatabaseURL != "" {
@@ -104,6 +108,7 @@ func run() error {
 		aRules, aFires = postgres.NewAlertRuleRepo(pool), postgres.NewAlertFireRepo(pool)
 		chans, dels = postgres.NewChannelRepo(pool), postgres.NewDeliveryRepo(pool)
 		sessions = postgres.NewSessionRepo(pool)
+		views, fbk = postgres.NewViewRepo(pool), postgres.NewFeedbackRepo(pool)
 		ready = pool.Ping
 		go postgres.RunRetention(ctx, pool, log, 1000, 365*24*time.Hour)
 		log.Info("storage: postgres")
@@ -115,6 +120,7 @@ func run() error {
 		aRules, aFires = memory.NewAlertRuleRepo(), memory.NewAlertFireRepo()
 		chans, dels = memory.NewChannelRepo(), memory.NewDeliveryRepo()
 		sessions = memory.NewSessionRepo()
+		views, fbk = memory.NewViewRepo(), memory.NewFeedbackRepo()
 		log.Warn("storage: in-memory (development only; data is lost on restart)")
 	}
 	hub := delivery.NewHub(log, cfg.AllowedOrigins, cfg.MaxWSPerUser)
@@ -204,7 +210,7 @@ func run() error {
 	apiSrv, err := api.New(api.Deps{
 		Cfg: cfg, Log: log, Users: users, Feeds: feeds, Invites: invites, Audit: audits, JWT: jwt,
 		Tickets: tickets, Personalizer: engine, Hub: hub, Registry: reg, Ready: ready, Sources: sources, Runs: runs, Bus: bus, Connectors: conns, Items: items, Usage: usage,
-		Alerts: alertEngine, AlertRules: aRules, AlertFires: aFires, Channels: chans, Deliveries: dels, Templates: templates, Outbound: sender, Sessions: sessions, Metrics: mreg,
+		Alerts: alertEngine, AlertRules: aRules, AlertFires: aFires, Channels: chans, Deliveries: dels, Templates: templates, Outbound: sender, Sessions: sessions, Views: views, Feedback: fbk, Metrics: mreg,
 	})
 	if err != nil {
 		return err
@@ -219,6 +225,11 @@ func run() error {
 			case <-ctx.Done():
 				return
 			case now := <-t.C:
+				if n, err := fbk.Prune(ctx, now.AddDate(-1, 0, 0)); err != nil {
+					log.Error("prune feedback", "err", err)
+				} else if n > 0 {
+					log.Info("pruned feedback", "deleted", n)
+				}
 				if n, err := sessions.Prune(ctx, now.Add(-7*24*time.Hour)); err != nil {
 					log.Error("prune refresh tokens", "err", err)
 				} else if n > 0 {

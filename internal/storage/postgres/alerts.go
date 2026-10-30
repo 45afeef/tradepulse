@@ -341,3 +341,19 @@ func (r *DeliveryRepo) Prune(ctx context.Context, olderThan time.Time) (int64, e
 	tag, err := r.db.Exec(ctx, `DELETE FROM channel_deliveries WHERE at < $1`, olderThan)
 	return tag.RowsAffected(), err
 }
+
+func (r *AlertFireRepo) Get(ctx context.Context, userID, id string) (alert.Fire, error) {
+	var f alert.Fire
+	var ents []byte
+	err := r.db.QueryRow(ctx,
+		`SELECT seq, id, rule_id, user_id, event_id, rule_name, severity, title, body, url, source, entities, reason, fired_at FROM alert_fires WHERE id = $1 AND user_id = $2`, id, userID).
+		Scan(&f.Seq, &f.ID, &f.RuleID, &f.UserID, &f.EventID, &f.RuleName, &f.Severity, &f.Title, &f.Body, &f.URL, &f.Source, &ents, &f.Reason, &f.FiredAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return f, alert.ErrNotFound
+	}
+	if err != nil {
+		return f, err
+	}
+	f.Cursor = page.Cursor(f.Seq)
+	return f, json.Unmarshal(ents, &f.Entities)
+}

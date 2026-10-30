@@ -6,6 +6,48 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.10.1-dev] — 2026-10-26 — Fix: server panicked building the OpenAPI document (duplicate schema name "Spec")
+**Verification:** reported by the owner's `check` run (panic in every API test). Fix not run by the author (no Go toolchain).
+**Suggested commit message:** `fix(api): disambiguate OpenAPI schema names (RuleSpec, ViewSpec); add collision guard test`
+- Cause: `alert.Spec` and `view.Spec` are both named `Spec`; Huma registers schemas by bare type name and panics on a clash, which would also have stopped the server from starting.
+- Fix: explicit schema names via `schemaNames` in `internal/api/server.go` (`RuleSpec`, `ViewSpec`); new test `TestOpenAPISchemaNamesDoNotCollide`. The rest of the API is unaffected; generated clients see `RuleSpec`/`ViewSpec` instead of an ambiguous `Spec`.
+- A scan of all domain types found no other collisions among API-exposed types.
+- Also fixed: `DELETE /me/alerts/fires/{id}/feedback` had a description under the 15-character documentation minimum (`TestEveryOperationIsDocumented`).
+
+---
+
+## [0.10.0-dev] — 2026-10-26 — M7: saved views, feedback and alert precision; fixes for three test failures (TP-030, TP-031)
+**Verification:** owner ran `check` on 0.9.x: 3 failures, all test-side mistakes, fixed below. This version is not compiled or run by the author (no Go toolchain); static pre-checks pass (imports, duplicate declarations, repository interface completeness, `api.Deps` fields). Run `docker compose run --rm check`.
+**Suggested commit message:**
+```
+feat(m7): saved views, feedback and alert precision; fix three paging/doc tests
+
+- saved views: /me/views CRUD (20 per member, unique names) and GET /me/feed?view=<id> with the same cursors
+- feedback: rate feed items and alerts (useful / not useful), `feedback` on items, operator summary with precision per source and rule, feedback_total metric
+- migration 0007 (views, feedback; RLS); feed/alert Get by owner; 365-day feedback retention
+- tests: feed paging test seeds the feed directly (the test server has no matching pipeline); WS docs check is case-insensitive; Postgres catch-up expectation corrected
+- 14 new tests (9 security)
+```
+### Why
+The brain lists saved views (P1) and feedback (MVP item 10; the only way to measure alert precision above 70%). Both were missing, and the frontend needs both contracts before the freeze.
+### Fixed (your failure report)
+- `TestFeedCursorPaginationAndCatchUp`: the test server has no personalization pipeline, so nothing reached the feed; the test now seeds the feed through the repository (it tests paging, not matching).
+- `TestWebSocketDocsDescribeEveryMessageKind`: the doc says "De-duplicate"; the check is now case-insensitive.
+- `TestCursorPaginationAcrossAllFourRepositories`: the expected catch-up items were off by one (after item 4 comes 5 and 6); the server was right.
+### Added
+- **Views:** `GET/POST /me/views`, `PUT/DELETE /me/views/{id}`; `GET /me/feed?view=<id>` filters by sources, topics, keywords, event types and a time window, paging and catch-up unchanged (D-049).
+- **Feedback:** `POST/DELETE /me/feed/{id}/feedback`, `POST/DELETE /me/alerts/fires/{id}/feedback`; `feedback` on feed items and fires; `GET /admin/feedback/summary` (totals, precision, busiest sources and rules, no identities); `feedback_total` metric (D-050, D-051).
+- **Storage:** migration `0007_views_feedback` (RLS, CHECK constraints, unique view name per member); `Get` by owner on feed and fire repositories; hourly pruning of feedback older than a year.
+- **Docs:** overview section, `docs/API.md`, `docs/DEVELOPER_GUIDE.md` (tracks, endpoint map, metrics).
+### Security notes
+Every query is member-scoped; other members' items, alerts and views are 404; ratings are private; the operator summary has no identities; notes are length-limited and control-character free; feed filtering runs in application code over at most 1,000 retained items (no dynamic SQL).
+### Known limitations
+Not yet run by the owner. Views filter only the retained feed (last 1,000 items per member). Feedback adds no live (WebSocket) message. No per-rule precision on the member's own rule list yet (operators have it).
+### Next
+Owner `check` run and `openapi.json`; then the frontend (TP-028).
+
+---
+
 ## [0.9.1-dev] — 2026-10-25 — Developer guide (the dev advocate and developer bible)
 **Verification:** documentation plus one drift test (`TestDeveloperGuideOnlyMentionsRealEndpointsAndFiles`), not run by the author (no Go toolchain). The guide's endpoints, request bodies, signature format, environment variables and file references were cross-checked against the code and configuration by script.
 **Suggested commit message:**
