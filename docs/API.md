@@ -15,7 +15,7 @@ Status: **1.0.0-rc.1 (freeze candidate).** The spec is `openapi.json` (generated
 - Create endpoints (`POST`) are **not idempotent** except webhook deliveries (same `id` or same title+url is a no-op). Do not blindly retry creates after a timeout; list first.
 
 ## Authentication
-`Authorization: Bearer <access token>` (15 minutes). `POST /auth/refresh` rotates the refresh token (30 days, single use; reusing one revokes the session). `POST /auth/logout`, `POST /me/logout-all`, `POST /me/password` end sessions. WebSockets use a one-time ticket (see `docs/WS.md`). See `docs/CLIENT.md` for the client algorithm.
+`Authorization: Bearer <access token>` (15 minutes). `GET /me` returns the signed-in member's id, email and `role` (`member` or `admin`); login and register responses carry the same `user`. `POST /auth/refresh` rotates the refresh token (30 days, single use; reusing one revokes the session). `POST /auth/logout`, `POST /me/logout-all`, `POST /me/password` end sessions. WebSockets use a one-time ticket (see `docs/WS.md`). See `docs/CLIENT.md` for the client algorithm.
 
 ## Errors
 All errors, including unknown paths, are RFC 9457 problem JSON with `Content-Type: application/problem+json`:

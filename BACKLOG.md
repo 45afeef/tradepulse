@@ -160,7 +160,7 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 - Deferred (not needed to start the frontend): `Idempotency-Key` for creates, session list endpoint, `Deprecation`/`Sunset` header middleware (policy only for now).
 
 ### TP-028 — Frontend MVP (M7 second half)
-- Status: Proposed · P0 · M7 · Depends: TP-027 verified by the owner
+- Status: Review (MVP delivered in 0.11.0-dev; not yet run in a browser by the author or the owner)
 - Scope (from the brain §8): invite signup/login, live feed with views and "why this", subscriptions, alert builder with preview, channels, admin (sources + test, invites, users, audit). Mobile-first. Start only after the owner confirms the contract (`openapi.json`).
 
 ### TP-029 — Developer guide (dev advocate and developer bible)
@@ -171,3 +171,6 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 
 ### TP-031 — Feedback and alert precision (backend)
 - Status: Review (delivered in 0.10.0-dev; not yet confirmed by running) · P0 · M7 (was listed under M5 in the brain and had been missed) · [x] rate/clear feed items and alerts, `feedback` on items, operator summary with precision per source/rule, metrics counter, 365-day retention; [ ] owner confirms in /docs; [ ] UI buttons (TP-028)
+
+### TP-032 — Frontend hardening after first real use
+- Status: Proposed · P1 · M7 · [ ] owner/developer walks every screen on a phone and a desktop and reports friction; [ ] Playwright end-to-end tests (login, onboarding, feed live update, alert create with preview, admin source wizard, invite); [ ] generate API types from `openapi.json` and drop the hand-written mirror; [ ] backend-for-frontend with httpOnly refresh cookie; [ ] PWA/push notifications; [ ] accessibility audit with a screen reader

@@ -6,6 +6,27 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.11.0-dev] — 2026-10-30 — Web app MVP (TP-028)
+**Verification:** backend change is small and covered by one new Go test (not run: no Go toolchain here). Frontend: strict TypeScript check passes against typed stand-ins for the npm packages (the sandbox is offline), every API call in `endpoints.ts` verified against the server routes (54 calls), and the 33 logic tests (client, live connection, helpers) were **executed and passed** in a Node harness. The 7 component tests and the production build have not been run. Run `docker compose run --rm check` and `docker compose run --rm web-check`.
+**Suggested commit message:**
+```
+feat(web): React web app MVP for members and operators; GET /me and role on the user payload
+
+- members: onboarding wizard, live feed (views, 👍/👎, why-this, catch-up), alerts with live preview, following, webhook delivery, settings
+- operators: overview with setup checklist, source wizard with test-fetch, invites with share link, members, publish, audit with CSV
+- design system (light/dark, mobile-first, accessible), single-flight token refresh, WebSocket client per docs/WS.md
+- compose: web + web-check services; CI: web job; production Dockerfile (nginx, strict CSP)
+- docs/FRONTEND.md; 40 frontend tests; contract check against openapi.json
+```
+### Added
+- `web/` application (see `docs/FRONTEND.md`), compose services `web` and `web-check`, CI job `web`, `web/Dockerfile` (nginx).
+- Backend: `GET /me` and `role` in login/register `user` (additive; D-054). Compose: dev `ALLOWED_ORIGINS` now includes `http://localhost:5173`.
+### Notes
+- Types are hand-written and guarded by `npm run contract`; generated types later. Refresh token is in `localStorage` for the MVP (D-053).
+- A real browser pass is the next gate; expect UI polish items (TP-032).
+
+---
+
 ## [0.10.1-dev] — 2026-10-26 — Fix: server panicked building the OpenAPI document (duplicate schema name "Spec")
 **Verification:** reported by the owner's `check` run (panic in every API test). Fix not run by the author (no Go toolchain).
 **Suggested commit message:** `fix(api): disambiguate OpenAPI schema names (RuleSpec, ViewSpec); add collision guard test`

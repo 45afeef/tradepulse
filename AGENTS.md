@@ -59,6 +59,9 @@ Changes to `/api/v1` are additive only (new endpoints/fields/optional params). L
 ## Developer guide rule
 `docs/DEVELOPER_GUIDE.md` is the onboarding bible. When an endpoint, command, env var or file it mentions changes, update it in the same change; `TestDeveloperGuideOnlyMentionsRealEndpointsAndFiles` fails on dead endpoint or file references.
 
+## Web app rules
+All HTTP goes through `web/src/api/client.ts`, every call is declared in `api/endpoints.ts` (`npm run contract` checks it against `openapi.json`), pure logic lives in `web/src/lib` with tests, no `dangerouslySetInnerHTML`, external links only via `safeUrl`. Details: `docs/FRONTEND.md`.
+
 ## API docs rule
 Every endpoint ships with documentation in the Huma registration (summary, description, tag, error codes) and field `doc`/`example` tags; `/docs` is the developer manual. `TestEveryOperationIsDocumented` fails otherwise. Update the overview in `internal/api/docs.go` when behavior visible to API users changes.
 

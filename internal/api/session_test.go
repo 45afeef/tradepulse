@@ -267,3 +267,29 @@ func TestMetricsEndpointIsTokenProtectedAndLeaksNothing(t *testing.T) {
 		t.Fatalf("metrics must be a 404 unless METRICS_TOKEN is set: %d", r.Code)
 	}
 }
+
+func TestMeReturnsProfileAndRoleAndLoginCarriesTheRole(t *testing.T) {
+	_, h := newServer(t, nil)
+	_, adminTok := adminToken(t)
+	p := signupFull(t, h, "me@example.com")
+	var m struct {
+		ID, Email, Role string
+	}
+	rec := do(h, "GET", "/api/v1/me", p.Token, "")
+	_ = json.Unmarshal(rec.Body.Bytes(), &m)
+	if rec.Code != http.StatusOK || m.Email != "me@example.com" || m.Role != "member" || m.ID != p.User.ID {
+		t.Fatalf("member: %d %s", rec.Code, rec.Body)
+	}
+	if strings.Contains(rec.Body.String(), "password") {
+		t.Fatal("never expose credentials")
+	}
+	if rec := do(h, "GET", "/api/v1/me", adminTok, ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"role":"admin"`) {
+		t.Fatalf("admin: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(h, "GET", "/api/v1/me", "", ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous: %d", rec.Code)
+	}
+	if !strings.Contains(do(h, "POST", "/api/v1/auth/login", "", `{"email":"me@example.com","password":"correct-horse-battery"}`).Body.String(), `"role":"member"`) {
+		t.Fatal("login must carry the role so clients can route members and admins")
+	}
+}

@@ -93,6 +93,9 @@ Dev uses the local `postgres` compose service automatically. To use a managed da
 ### Start here (developers, dev advocates)
 **[`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md)**: ordered steps and commands for every audience: see it in 15 minutes, mock it, build a frontend on it, integrate webhooks, contribute, deploy, review security, run a demo.
 
+### Web app
+First-party React app (members and operators): [`docs/FRONTEND.md`](docs/FRONTEND.md) · run it with `docker compose up --build` and open http://localhost:5173.
+
 ### API contract and clients
 Compatibility policy, conventions, pagination and errors: [`docs/API.md`](docs/API.md) · WebSocket protocol: [`docs/WS.md`](docs/WS.md) · building a typed client: [`docs/CLIENT.md`](docs/CLIENT.md).
 

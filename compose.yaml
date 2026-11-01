@@ -50,7 +50,7 @@ services:
       APP_ENV: development
       DOCS_ENABLED: "true"
       JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-0123456789abcdef0123}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
       DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/tradepulse?sslmode=disable}
       DATABASE_MIGRATION_URL: ${DATABASE_MIGRATION_URL:-}
       DB_SIMPLE_PROTOCOL: ${DB_SIMPLE_PROTOCOL:-auto}
@@ -63,7 +63,32 @@ services:
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-dev-admin-password-change-me}
       LOG_LEVEL: debug
 
+  # Web app (Vite dev server with hot reload). Open http://localhost:5173. /api and /ws are proxied to the api service.
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    environment:
+      API_URL: http://api:8080
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./web:/app/web
+      - web_node_modules:/app/web/node_modules
+    depends_on:
+      - api
+
   # --- one-shot tools (not started by `up`) ---
+  web-check:   # typecheck + unit tests + production build of the web app
+    image: node:22-alpine
+    profiles: [tools]
+    working_dir: /app/web
+    volumes:
+      - ./web:/app/web
+      - web_node_modules:/app/web/node_modules
+    command: sh -c "npm install && npm run typecheck && npm test && npm run build"
+
   check:
     <<: *go
     profiles: [tools]
@@ -93,3 +118,4 @@ volumes:
   gomod:
   gobuild:
   pgdata:
+  web_node_modules:

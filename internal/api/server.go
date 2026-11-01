@@ -306,6 +306,9 @@ func (s *Server) routes(mux *http.ServeMux) huma.API {
 	huma.Register(api, huma.Operation{OperationID: "reset-user-password", Method: http.MethodPost, Path: "/api/v1/admin/users/{id}/reset-password", Tags: []string{"admin"},
 		Summary: "Reset a member's password", Security: secured, Middlewares: admin,
 		Description: "Generates a temporary password, **shown once** in the response; the member's sessions are signed out immediately. Hand it over securely and ask the member to change it (`POST /me/password`).", Errors: []int{401, 403, 404}}, s.resetPassword)
+	huma.Register(api, huma.Operation{OperationID: "get-me", Method: http.MethodGet, Path: "/api/v1/me", Tags: []string{"me"},
+		Summary: "Who am I", Security: secured, Middlewares: member,
+		Description: "Your id, email and role (`member` or `admin`). Clients use the role to show or hide the operator console; the server enforces it regardless.", Errors: []int{401}}, s.getMe)
 	huma.Register(api, huma.Operation{OperationID: "list-views", Method: http.MethodGet, Path: "/api/v1/me/views", Tags: []string{"me"},
 		Summary: "My saved views", Security: secured, Middlewares: member,
 		Description: "Saved views are named filters over your feed (sources, topics, keywords, event types, time window). Use one with `GET /me/feed?view=<id>`. At most 20; returned whole.", Errors: []int{401}}, s.listViews)

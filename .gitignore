@@ -1,4 +1,6 @@
 tmp/
+web/node_modules/
+web/dist/
 .env
 .env.production
 *.test

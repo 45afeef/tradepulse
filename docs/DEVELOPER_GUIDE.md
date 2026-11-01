@@ -140,6 +140,7 @@ Goal: start building screens today, before you have a backend. You need only `op
 ## Track C: Frontend, live dev server
 
 - [ ] 1. `docker compose up --build` (Section 2).
+- [ ] 1b. **Use the first-party web app** (optional, but the fastest way to see everything): `docker compose up --build` also starts it at `http://localhost:5173` (see `docs/FRONTEND.md`). Build your own UI alongside it, or read its source as a worked example of the contract.
 - [ ] 2. **Allow your dev origin** (CORS and WebSocket origin): create `.env` next to `compose.yaml`:
   ```
   ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
@@ -239,7 +240,7 @@ Order of work (each step is a vertical slice you can demo):
 
 | Screen | Calls |
 |---|---|
-| Login / signup | `POST /api/v1/auth/login`, `POST /api/v1/auth/register`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout` |
+| Login / signup | `GET /api/v1/me`, `POST /api/v1/auth/login`, `POST /api/v1/auth/register`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout` |
 | Feed | `GET /api/v1/me/feed`, `POST /api/v1/ws-ticket`, WebSocket `/ws`, `POST /api/v1/me/feed/{id}/feedback`, `DELETE /api/v1/me/feed/{id}/feedback` |
 | Saved views | `GET /api/v1/me/views`, `POST /api/v1/me/views`, `PUT /api/v1/me/views/{id}`, `DELETE /api/v1/me/views/{id}`, then `GET /api/v1/me/feed?view=<id>` |
 | Subscriptions | `GET /api/v1/me/subscriptions`, `PUT /api/v1/me/subscriptions`, `GET /api/v1/event-types`, `GET /api/v1/sources` |

@@ -45,6 +45,7 @@ type registerIn struct{ Body registerBody }
 type publicUser struct {
 	ID        string    `json:"id"`
 	Email     string    `json:"email"`
+	Role      string    `json:"role" enum:"member,admin" doc:"admin unlocks the operator console in clients"`
 	CreatedAt time.Time `json:"created_at"`
 }
 type tokenBody struct {
@@ -132,7 +133,7 @@ func (s *Server) issueSession(ctx context.Context, u user.User, familyID string)
 		return nil, huma.Error500InternalServerError("internal server error")
 	}
 	return &tokenOut{Body: tokenBody{Token: tok, RefreshToken: rt, ExpiresIn: int(s.JWT.TTL().Seconds()),
-		User: publicUser{ID: u.ID, Email: u.Email, CreatedAt: u.CreatedAt}}}, nil
+		User: publicUser{ID: u.ID, Email: u.Email, Role: u.Role, CreatedAt: u.CreatedAt}}}, nil
 }
 
 func (s *Server) signup(ctx context.Context, in *registerIn) (*tokenOut, error) {

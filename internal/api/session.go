@@ -18,6 +18,16 @@ import (
 	"tradepulse/internal/metrics"
 )
 
+type meOut struct{ Body publicUser }
+
+func (s *Server) getMe(ctx context.Context, _ *struct{}) (*meOut, error) {
+	u, err := s.Users.GetByID(ctx, userID(ctx))
+	if err != nil {
+		return nil, huma.Error401Unauthorized("unknown user")
+	}
+	return &meOut{Body: publicUser{ID: u.ID, Email: u.Email, Role: u.Role, CreatedAt: u.CreatedAt}}, nil
+}
+
 type refreshBody struct {
 	RefreshToken string `json:"refresh_token" minLength:"10" maxLength:"200"`
 }
