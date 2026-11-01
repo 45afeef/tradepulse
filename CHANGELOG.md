@@ -6,6 +6,13 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.11.1-dev] — 2026-11-01 — Web toolchain fix
+**Verification:** owner ran `docker compose run --rm web-check`: typecheck, build and 40/40 tests pass.
+**Suggested commit message:** `fix(web): add @types/node so vite.config.ts type-checks`
+- `vite.config.ts` reads `process.env.API_URL`; `@types/node` (devDependency) provides the `process` type. Applied by the owner; no other change.
+
+---
+
 ## [0.11.0-dev] — 2026-10-30 — Web app MVP (TP-028)
 **Verification:** backend change is small and covered by one new Go test (not run: no Go toolchain here). Frontend: strict TypeScript check passes against typed stand-ins for the npm packages (the sandbox is offline), every API call in `endpoints.ts` verified against the server routes (54 calls), and the 33 logic tests (client, live connection, helpers) were **executed and passed** in a Node harness. The 7 component tests and the production build have not been run. Run `docker compose run --rm check` and `docker compose run --rm web-check`.
 **Suggested commit message:**
