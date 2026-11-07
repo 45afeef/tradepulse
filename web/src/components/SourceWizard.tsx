@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
 import type { Source, SourceDraft, SourceTest, SourceType, WebConfig } from '../api/types';
-import { INTERVALS, TYPE_INFO } from '../lib/sources';
+import { INTERVALS, TYPE_INFO, robotsBlocked, withRobotsOverride, withoutRobotsOverride } from '../lib/sources';
+import { RobotsOverrideModal } from './RobotsOverride';
 import { slugify, validSlug } from '../lib/format';
 import { Badge, Banner, Button, Card, ChipInput, CopyButton, Field, Icon, Modal, Stepper, useToast } from '../ui';
 
@@ -39,20 +41,21 @@ export function SourceWizard({ onClose }: { onClose: () => void }) {
   const [tested, setTested] = useState<SourceTest | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [created, setCreated] = useState<Source | null>(null);
+  const [overriding, setOverriding] = useState(false);
 
   const usage = useQuery({ queryKey: ['admin', 'usage'], queryFn: () => api.admin.usage(), enabled: type === 'x' });
   const polled = type === 'rss' || type === 'webmonitor' || type === 'x';
 
-  const draft = (): SourceDraft => {
+  const draft = (w: WebConfig = web): SourceDraft => {
     const d: SourceDraft = { name, type, entities };
     if (type === 'rss' || type === 'webmonitor') { d.url = url.trim(); d.interval_seconds = interval; }
     if (type === 'x') { d.x = { handle: handle.replace(/^@/, '').trim() }; d.interval_seconds = interval; }
-    if (type === 'webmonitor') d.web = { ...web, title_selector: web.title_selector || undefined, summary_selector: web.summary_selector || undefined, link_selector: web.link_selector || undefined };
+    if (type === 'webmonitor') d.web = { ...w, title_selector: w.title_selector || undefined, summary_selector: w.summary_selector || undefined, link_selector: w.link_selector || undefined };
     if (type === 'webhook') d.webhook = { auth };
     return d;
   };
   const test = useMutation({
-    mutationFn: () => api.admin.testSource(draft()),
+    mutationFn: (w?: WebConfig) => api.admin.testSource(draft(w)),
     onSuccess: (r: SourceTest) => { setTested(r); setErr(null); },
     onError: (e: unknown) => { setTested(null); setErr(errorMessage(e)); },
   });
@@ -71,11 +74,13 @@ export function SourceWizard({ onClose }: { onClose: () => void }) {
   const configOk = nameOk && (type === 'manual' || type === 'webhook' || (type === 'x' ? handle.trim().length > 0 : url.trim().length > 0 && (type !== 'webmonitor' || web.item_selector.trim().length > 0)));
 
   return (
+    <>
     <Modal wide title="Add a source" onClose={onClose}>
       <div className="stack">
         {step < 3 && <Stepper step={step} total={3} />}
         {step === 0 && (
           <div className="stack">
+            <p className="small muted">Not sure? <Link to="/help/sources-guide" onClick={onClose}>Which type should I choose?</Link></p>
             <div className="grid cols-2">{TYPES.map((t) => (
               <button key={t} type="button" className={`pick ${type === t ? 'on' : ''}`} aria-pressed={type === t} onClick={() => { setType(t); setTested(null); }}>
                 <Icon name={TYPE_INFO[t]!.icon} /><span className="stack sm" style={{ textAlign: 'left' }}><b>{TYPE_INFO[t]!.title}</b><span className="small muted">{TYPE_INFO[t]!.blurb}</span></span></button>))}</div>
@@ -117,7 +122,8 @@ export function SourceWizard({ onClose }: { onClose: () => void }) {
                 <div><Button variant="secondary" icon="play" loading={test.isPending} onClick={() => { setErr(null); test.mutate(undefined); }}>Test fetch</Button></div>
                 {tested && (tested.ok
                   ? <Card className="flat stack sm"><div className="row"><Badge tone="ok" icon="check">Works</Badge><span>{tested.count} items found. First few:</span></div>{tested.preview.slice(0, 5).map((p, i) => <div key={i} className="small"><b>{p.title}</b>{p.summary && <span className="muted"> · {p.summary.slice(0, 100)}</span>}</div>)}</Card>
-                  : <Banner tone="danger" icon="alert"><b>Could not read it.</b> {tested.error}</Banner>)}
+                  : <Banner tone="danger" icon="alert" action={type === 'webmonitor' && robotsBlocked(tested.error) && !web.ignore_robots ? <Button size="sm" variant="secondary" onClick={() => setOverriding(true)}>Override robots.txt…</Button> : undefined}><b>Could not read it.</b> {tested.error}</Banner>)}
+                {type === 'webmonitor' && web.ignore_robots && <Banner tone="warn" icon="alert" action={<Button size="sm" variant="ghost" onClick={() => { const w = withoutRobotsOverride(web); setWeb(w); setTested(null); }}>Respect robots.txt</Button>}><b>robots.txt is overridden for this source.</b> Reason: {web.ignore_robots_reason}</Banner>}
               </>
             ) : <p className="muted">{type === 'webhook' ? 'After saving you get a signing secret and a ready-to-run example.' : 'Manual sources need no setup. Publish items from the Publish page.'}</p>}
             <label className="check"><input type="checkbox" checked={enableNow} onChange={(e) => setEnableNow(e.target.checked)} />Start immediately {polled && !tested?.ok ? '(untested)' : ''}</label>
@@ -130,5 +136,7 @@ export function SourceWizard({ onClose }: { onClose: () => void }) {
         )}
       </div>
     </Modal>
+    {overriding && <RobotsOverrideModal initialReason={web.ignore_robots_reason ?? ''} busy={test.isPending} onClose={() => setOverriding(false)} onApply={(reason) => { const next = withRobotsOverride(web, reason); setWeb(next); setOverriding(false); setTested(null); setErr(null); test.mutate(next); }} />}
+    </>
   );
 }

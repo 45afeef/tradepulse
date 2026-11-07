@@ -6,6 +6,49 @@ Verification legend: ✅ verified by running · ⚠️ written but **not yet run
 
 ---
 
+## [0.12.1-dev] — 2026-11-02 — Operator UI: override robots.txt (accountable)
+**Verification:** helpers and help-guard tests were executed in the author's Node harness (48 of 48 passed); the new Go test, the 2 component tests and the build have not been run. Run `docker compose run --rm check` and `docker compose run --rm web-check`.
+**Suggested commit message:**
+```
+feat: operator UI to override robots.txt per source, with acknowledgement, recorded reason and audit trail
+
+- web: override offered after a failed fetch (wizard) or in the source detail; badge in the list; "respect again"
+- api: audit entries source.override_robots / source.respect_robots with who, when and why (no noise on resave)
+- help: sources guide section; docs/sources/news-pages.md; D-057
+- tests: Go audit test, helper and modal tests
+```
+### Added
+- Wizard: after **Test fetch** fails with a robots message, **Override robots.txt…** opens a dialog (acknowledge terms + reason 10 to 200 characters); on apply the fetch is retried. A banner shows the override and offers **Respect robots.txt**.
+- Source detail (page monitors): robots.txt status, **Override…** / **Respect robots.txt again**, reason on record, hint when the last error is a robots block. List: "robots.txt overridden" badge.
+- Backend (additive): `source.override_robots` and `source.respect_robots` audit entries on create/update. The existing `web.ignore_robots` + `web.ignore_robots_reason` (reason required) fields are unchanged.
+### Notes
+- The default stays respecting robots.txt. An override does not make reading a page allowed; the docs and the dialog say so.
+
+---
+
+## [0.12.0-dev] — 2026-11-01 — User documentation: in-app help centre (TP-033)
+**Verification:** 46 logic and help-guard tests were executed by the author in a Node harness (all passed, including the checks that every help link and anchor resolves). The new Go test, 10 component tests and the build have not been run (no Go toolchain/npm packages in the authoring sandbox). Run `docker compose run --rm check` and `docker compose run --rm web-check`.
+**Suggested commit message:**
+```
+feat(web): in-app help centre for members and operators; derive documented limits from code
+
+- 10 Markdown pages (quick start, feed and views, alerts, webhooks with verification code, account, FAQ, glossary, data use; operator handbook and sources guide)
+- safe Markdown renderer (no HTML injection), search, hints beside confusing controls, contextual "learn more" links, help button in the top bar
+- tests: every page registered, every link/anchor resolves; Go test fails when documented limits or retention differ from the code
+- docs: FRONTEND help section, DEVELOPER_GUIDE, AGENTS rule; VITE_SUPPORT_EMAIL
+```
+### Added
+- `/help` and `/help/:slug` (members; operators also see their pages), top-bar and sidebar entry, Settings card.
+- `web/src/help/*.md` (10 pages), registry `web/src/help/index.ts`, `lib/markdown.ts`, `lib/helpSearch.ts`, `components/Markdown.tsx`, `pages/Help.tsx`.
+- Hints (`Hint`, `Field hint`) on cooldown and importance; links from Alerts (including "Why was this paused?"), Delivery, Welcome, source wizard, Invites, Settings.
+- Tests: Vitest help guards and Markdown tests; Go `TestHelpPagesStateTheRealLimitsAndRetention`.
+### Notes
+- The **data-use** page describes what the system does today (what is stored, retention, who sees what, no trackers, no self-service deletion). The operator must review it before inviting members; it is not legal advice.
+### Next
+Owner: `check` and `web-check`, read the pages, set `VITE_SUPPORT_EMAIL`, then the browser walkthrough and friction list.
+
+---
+
 ## [0.11.1-dev] — 2026-11-01 — Web toolchain fix
 **Verification:** owner ran `docker compose run --rm web-check`: typecheck, build and 40/40 tests pass.
 **Suggested commit message:** `fix(web): add @types/node so vite.config.ts type-checks`

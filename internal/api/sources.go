@@ -237,6 +237,7 @@ func (s *Server) createSource(ctx context.Context, in *sourceCreateIn) (*sourceO
 		return nil, huma.Error500InternalServerError("internal server error")
 	}
 	s.record(ctx, userID(ctx), "source.create", "source", src.ID, src.Name)
+	s.recordRobots(ctx, src, false, "")
 	v := toView(src, now)
 	if src.Type == sourcedef.TypeWebhook {
 		v.WebhookSecret = s.hookSecret(src) // the only time (besides rotation) the secret is shown
@@ -289,6 +290,10 @@ func (s *Server) updateSource(ctx context.Context, in *sourceUpdateIn) (*sourceO
 	if err != nil {
 		return nil, err
 	}
+	prevIgnore, prevReason := cur.Web != nil && cur.Web.IgnoreRobots, ""
+	if cur.Web != nil {
+		prevReason = cur.Web.IgnoreRobotsReason
+	}
 	oldX := cur.X
 	cur.URL, cur.Enabled, cur.IntervalSeconds, cur.Entities, cur.Web = in.Body.URL, in.Body.Enabled, in.Body.IntervalSeconds, in.Body.Entities, in.Body.Web
 	cur.Webhook, cur.X = in.Body.Webhook, nil
@@ -315,6 +320,7 @@ func (s *Server) updateSource(ctx context.Context, in *sourceUpdateIn) (*sourceO
 		return nil, huma.Error500InternalServerError("internal server error")
 	}
 	s.record(ctx, userID(ctx), "source.update", "source", n.ID, n.Name)
+	s.recordRobots(ctx, n, prevIgnore, prevReason)
 	fresh, _ := s.Sources.Get(ctx, n.ID)
 	return &sourceOut{Body: toView(fresh, time.Now().UTC())}, nil
 }
@@ -494,4 +500,16 @@ func (s *Server) getUsage(ctx context.Context, _ *struct{}) (*usageOut, error) {
 		b.XRemainingUSD = r
 	}
 	return &usageOut{Body: b}, nil
+}
+
+// recordRobots audits turning the robots.txt override on (or changing its reason) and turning it off again,
+// so the audit log answers "who decided to ignore robots.txt for this source, when and why".
+func (s *Server) recordRobots(ctx context.Context, src sourcedef.Source, prevIgnore bool, prevReason string) {
+	on := src.Web != nil && src.Web.IgnoreRobots
+	switch {
+	case on && (!prevIgnore || prevReason != src.Web.IgnoreRobotsReason):
+		s.record(ctx, userID(ctx), "source.override_robots", "source", src.ID, src.Name+": "+src.Web.IgnoreRobotsReason)
+	case !on && prevIgnore:
+		s.record(ctx, userID(ctx), "source.respect_robots", "source", src.ID, src.Name)
+	}
 }

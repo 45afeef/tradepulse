@@ -1,7 +1,7 @@
 /** "source.create" -> "Source created"; unknown actions are shown readably instead of hidden. */
 const VERBS: Record<string, string> = {
   create: 'created', update: 'updated', delete: 'deleted', run: 'run', suspend: 'suspended', reactivate: 'reactivated', reset_password: 'password reset', revoke: 'revoked',
-  rotate_secret: 'secret rotated', logout_all: 'signed out everywhere', change_password: 'password changed', post: 'posted', login: 'signed in',
+  rotate_secret: 'secret rotated', override_robots: 'robots.txt overridden', respect_robots: 'robots.txt respected again', logout_all: 'signed out everywhere', change_password: 'password changed', post: 'posted', login: 'signed in',
 };
 export function auditLabel(action: string): string {
   const [area = '', ...rest] = action.split('.');

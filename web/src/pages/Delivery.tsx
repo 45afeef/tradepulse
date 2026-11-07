@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
@@ -62,7 +63,7 @@ export function DeliveryPage() {
 
   return (
     <div className="page">
-      <div className="page-head"><div><h1>Delivery</h1><p>Where your alerts go besides this app.</p></div><Button icon="plus" onClick={() => setAdding(true)}>Add webhook</Button></div>
+      <div className="page-head"><div><h1>Delivery</h1><p>Where your alerts go besides this app. <Link to="/help/delivery">How to verify deliveries</Link></p></div><Button icon="plus" onClick={() => setAdding(true)}>Add webhook</Button></div>
       <div className="stack lg">
         <Card className="row"><Icon name="bell" /><div className="grow"><b>In the app</b><p className="muted small">Always on. Alerts appear live and in your history.</p></div><Badge tone="ok">active</Badge></Card>
         {channels.isLoading && <SkeletonCards n={1} />}

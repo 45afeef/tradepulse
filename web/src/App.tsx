@@ -9,6 +9,7 @@ import { AlertsPage } from './pages/Alerts';
 import { FollowingPage } from './pages/Following';
 import { DeliveryPage } from './pages/Delivery';
 import { SettingsPage } from './pages/Settings';
+import { HelpPage } from './pages/Help';
 import { WelcomePage } from './pages/Welcome';
 import { AdminOverview } from './pages/admin/Overview';
 import { AdminSources } from './pages/admin/Sources';
@@ -50,6 +51,8 @@ export function App() {
         <Route path="/following" element={<FollowingPage />} />
         <Route path="/delivery" element={<DeliveryPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/help" element={<HelpPage />} />
+        <Route path="/help/:slug" element={<HelpPage />} />
         <Route path="/admin" element={<RequireAdmin><AdminOverview /></RequireAdmin>} />
         <Route path="/admin/sources" element={<RequireAdmin><AdminSources /></RequireAdmin>} />
         <Route path="/admin/invites" element={<RequireAdmin><AdminInvites /></RequireAdmin>} />

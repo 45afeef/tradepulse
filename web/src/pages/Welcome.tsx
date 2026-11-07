@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
@@ -52,7 +52,7 @@ export function WelcomePage() {
   return (
     <div className="page">
       <div className="stack lg">
-        <div><h1>Let&rsquo;s set you up</h1><p className="muted">About two minutes. You can change everything later.</p></div>
+        <div><h1>Let&rsquo;s set you up</h1><p className="muted">About two minutes. You can change everything later. <Link to="/help/quick-start">Need help?</Link></p></div>
         <Stepper step={step} total={3} />
 
         {step === 0 && (

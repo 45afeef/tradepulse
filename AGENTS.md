@@ -62,6 +62,9 @@ Changes to `/api/v1` are additive only (new endpoints/fields/optional params). L
 ## Web app rules
 All HTTP goes through `web/src/api/client.ts`, every call is declared in `api/endpoints.ts` (`npm run contract` checks it against `openapi.json`), pure logic lives in `web/src/lib` with tests, no `dangerouslySetInnerHTML`, external links only via `safeUrl`. Details: `docs/FRONTEND.md`.
 
+## Help centre rule
+User-facing behavior and limits are documented in `web/src/help/*.md` (members and operators). Change the help in the same change as the behavior; `TestHelpPagesStateTheRealLimitsAndRetention` and the Vitest help tests fail on stale numbers, dead links or unregistered pages. Never add raw HTML to help pages.
+
 ## API docs rule
 Every endpoint ships with documentation in the Huma registration (summary, description, tag, error codes) and field `doc`/`example` tags; `/docs` is the developer manual. `TestEveryOperationIsDocumented` fails otherwise. Update the overview in `internal/api/docs.go` when behavior visible to API users changes.
 

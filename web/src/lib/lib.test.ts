@@ -4,7 +4,7 @@ import { RecentSet, backoffMs } from './backoff';
 import { LIST_OPS, describeCondition, isComplete, parseValue, valueToText } from './conditions';
 import { mergeItems, patchItem, prependItem } from './feedCache';
 import { auditLabel, toCsv } from './audit';
-import { toUpdate } from './sources';
+import { reasonOk, robotsBlocked, toUpdate, withRobotsOverride, withoutRobotsOverride } from './sources';
 import type { FeedItem, FeedPage, Source } from '../api/types';
 import { mergeSubscriptions } from './subscriptions';
 
@@ -84,6 +84,7 @@ describe('feed cache', () => {
 
 describe('audit helpers', () => {
   it('labels actions readably', () => {
+    expect(auditLabel('source.override_robots')).toBe('Source robots.txt overridden'); expect(auditLabel('source.respect_robots')).toBe('Source robots.txt respected again');
     expect(auditLabel('source.create')).toBe('Source created'); expect(auditLabel('user.reset_password')).toBe('User password reset'); expect(auditLabel('weird.thing_happened')).toBe('Weird thing happened');
   });
   it('CSV quotes properly and neutralises spreadsheet formulas', () => {
@@ -104,5 +105,20 @@ describe('sources and subscriptions', () => {
     expect(out).toHaveLength(3);
     expect(out.find((s) => s.value === 'Oil')?.types).toEqual(['metric']);
     expect(out.find((s) => s.value === 'rates')).toEqual({ kind: 'entity', value: 'rates' });
+  });
+});
+
+describe('robots.txt override helpers', () => {
+  it('detects robots errors and validates the recorded reason', () => {
+    expect(robotsBlocked('blocked by robots.txt')).toBe(true); expect(robotsBlocked('Robots disallow this path')).toBe(true);
+    expect(robotsBlocked('timeout')).toBe(false); expect(robotsBlocked(undefined)).toBe(false);
+    expect(reasonOk('too short')).toBe(false); expect(reasonOk('  Permission from the publisher  ')).toBe(true); expect(reasonOk('x'.repeat(201))).toBe(false);
+  });
+  it('switches the override on with a trimmed reason and off again without leaving traces', () => {
+    const web = { item_selector: 'article', title_selector: 'h3' };
+    const on = withRobotsOverride(web, '  Permission from the publisher ');
+    expect(on).toEqual({ item_selector: 'article', title_selector: 'h3', ignore_robots: true, ignore_robots_reason: 'Permission from the publisher' });
+    expect(withoutRobotsOverride(on)).toEqual(web);
+    expect('ignore_robots' in withoutRobotsOverride(on)).toBe(false);
   });
 });

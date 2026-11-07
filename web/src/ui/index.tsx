@@ -59,8 +59,18 @@ export function CopyButton({ text, label = 'Copy' }: { text: string; label?: str
 }
 
 // ---------- forms ----------
-export function Field({ label, help, error, children, htmlFor }: { label?: string; help?: ReactNode; error?: string | null; children: ReactNode; htmlFor?: string }) {
-  return <div className="field">{label && <label htmlFor={htmlFor}>{label}</label>}{children}{error ? <span className="error-text" role="alert">{error}</span> : help ? <span className="help">{help}</span> : null}</div>;
+/** A small (i) button that reveals a short explanation in place. */
+export function Hint({ children, label = 'More information' }: { children: ReactNode; label?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span>
+      <button type="button" className="rate" style={{ padding: '.1rem .3rem' }} aria-label={label} aria-expanded={open} onClick={() => setOpen((o) => !o)}><Icon name="info" size={14} /></button>
+      {open && <span className="popover" role="note" style={{ display: 'block', marginTop: '.3rem' }}>{children}</span>}
+    </span>
+  );
+}
+export function Field({ label, help, error, children, htmlFor, hint }: { label?: string; help?: ReactNode; error?: string | null; children: ReactNode; htmlFor?: string; hint?: ReactNode }) {
+  return <div className="field">{label && <div className="row" style={{ gap: '.15rem' }}><label htmlFor={htmlFor}>{label}</label>{hint && <Hint>{hint}</Hint>}</div>}{children}{error ? <span className="error-text" role="alert">{error}</span> : help ? <span className="help">{help}</span> : null}</div>;
 }
 export function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return <label className="switch" title={label}><input type="checkbox" role="switch" checked={checked} disabled={disabled} aria-label={label} onChange={(e) => onChange(e.target.checked)} /><span /></label>;

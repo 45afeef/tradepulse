@@ -1,4 +1,4 @@
-import type { Source, SourceUpdate } from '../api/types';
+import type { Source, SourceUpdate, WebConfig } from '../api/types';
 
 /** The PUT body that keeps a source exactly as it is (PUT replaces, so unchanged fields must be resent). */
 export function toUpdate(s: Source, over: Partial<SourceUpdate> = {}): SourceUpdate {
@@ -19,3 +19,20 @@ export const TYPE_INFO: Record<string, { title: string; blurb: string; icon: 'da
   manual: { title: 'Manual posts', blurb: 'Publish announcements yourself from the Publish page.', icon: 'megaphone' },
   x: { title: 'X account', blurb: 'Follow an account through the official API (budget-capped).', icon: 'users' },
 };
+
+/** True when an error message says the site's robots.txt forbids reading the page. */
+export const robotsBlocked = (msg: string | undefined | null): boolean => /robots/i.test(msg ?? '');
+
+export const REASON_MIN = 10;
+export const REASON_MAX = 200;
+export const reasonOk = (r: string) => r.trim().length >= REASON_MIN && r.trim().length <= REASON_MAX;
+
+/** The same page config with the robots.txt override switched on (a recorded reason is mandatory). */
+export function withRobotsOverride(web: WebConfig, reason: string): WebConfig {
+  return { ...web, ignore_robots: true, ignore_robots_reason: reason.trim() };
+}
+/** The same page config, respecting robots.txt again. */
+export function withoutRobotsOverride(web: WebConfig): WebConfig {
+  const { ignore_robots: _a, ignore_robots_reason: _b, ...rest } = web;
+  return rest;
+}

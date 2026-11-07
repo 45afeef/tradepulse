@@ -130,8 +130,8 @@ export function AlertEditor({ rule, startTemplate, onClose }: { rule?: AlertRule
           )}
         </div>
         <div className="grid cols-2">
-          <Field label="At most one alert every" htmlFor="alert-cd"><select id="alert-cd" className="select" value={cooldown} onChange={(e) => setCooldown(Number(e.target.value))}>{[...new Set([...COOLDOWNS, cooldown])].sort((a, b) => a - b).map((c) => <option key={c} value={c}>{duration(c)}</option>)}</select></Field>
-          <Field label="Importance" htmlFor="alert-sev"><select id="alert-sev" className="select" value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}><option value="info">Info</option><option value="notable">Notable</option><option value="high">High</option></select></Field>
+          <Field label="At most one alert every" htmlFor="alert-cd" hint="After this rule fires it stays quiet for this long, even if more items match. Longer means fewer interruptions."><select id="alert-cd" className="select" value={cooldown} onChange={(e) => setCooldown(Number(e.target.value))}>{[...new Set([...COOLDOWNS, cooldown])].sort((a, b) => a - b).map((c) => <option key={c} value={c}>{duration(c)}</option>)}</select></Field>
+          <Field label="Importance" htmlFor="alert-sev" hint="Shown on the alert and in your history so you can tell what matters. It does not change when the alert fires."><select id="alert-sev" className="select" value={severity} onChange={(e) => setSeverity(e.target.value as Severity)}><option value="info">Info</option><option value="notable">Notable</option><option value="high">High</option></select></Field>
         </div>
         <div className="field">
           <span className="label">Deliver to</span>

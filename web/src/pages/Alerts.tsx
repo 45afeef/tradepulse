@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/endpoints';
 import { errorMessage } from '../api/client';
@@ -20,7 +20,7 @@ export function AlertsPage() {
   return (
     <div className="page">
       <div className="page-head">
-        <div><h1>Alerts</h1><p>The moments you cannot miss, pushed to you with the reason.</p></div>
+        <div><h1>Alerts</h1><p>The moments you cannot miss, pushed to you with the reason. <Link to="/help/alerts">How alerts work</Link></p></div>
         <Button icon="plus" onClick={() => setEditor({})}>New alert</Button>
       </div>
       <div style={{ marginBottom: '1rem' }}><Tabs label="Alerts" value={tab} onChange={(t: string) => setParams(t === 'rules' ? {} : { tab: t })} items={[{ id: 'rules', label: 'My alerts' }, { id: 'history', label: 'History' }]} /></div>
@@ -63,7 +63,7 @@ function Rules({ onEdit, onNew }: { onEdit: (r: AlertRule) => void; onNew: () =>
             </div>
             <Switch checked={r.enabled} onChange={(on) => toggle.mutate({ r, on })} label={`${r.name} enabled`} />
           </div>
-          {r.paused_reason && <Banner tone="warn" icon="alert" action={<Button size="sm" onClick={() => toggle.mutate({ r, on: true })}>Resume</Button>}><b>Paused automatically.</b> {r.paused_reason}</Banner>}
+          {r.paused_reason && <Banner tone="warn" icon="alert" action={<Button size="sm" onClick={() => toggle.mutate({ r, on: true })}>Resume</Button>}><b>Paused automatically.</b> {r.paused_reason} <Link to="/help/alerts#why-an-alert-gets-paused">Why?</Link></Banner>}
           <div className="row"><Button variant="ghost" size="sm" icon="edit" onClick={() => onEdit(r)}>Edit</Button><Button variant="ghost" size="sm" icon="trash" onClick={() => remove(r)}>Delete</Button></div>
         </Card>
       ))}

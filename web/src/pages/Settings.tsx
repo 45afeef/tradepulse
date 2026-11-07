@@ -49,6 +49,7 @@ export function SettingsPage() {
             <div><Button type="submit" loading={busy} disabled={!cur || next.length < 10 || next !== again}>Change password</Button></div>
           </form>
         </Card>
+        <Card className="row"><Icon name="info" /><div className="grow"><b>Help</b><p className="muted small">Guides, troubleshooting and <Link to="/help/data-use">how your data is used</Link>.</p></div><Link className="btn secondary sm" to="/help">Open help</Link></Card>
         <Card className="stack sm">
           <h3>Sessions</h3>
           <div className="row wrap">

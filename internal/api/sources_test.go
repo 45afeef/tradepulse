@@ -251,3 +251,50 @@ func TestManualPostValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestRobotsOverrideNeedsAReasonAndIsAudited(t *testing.T) {
+	_, h := newServer(t, nil)
+	_, admin := adminToken(t)
+	web := func(extra string) string {
+		return `{"item_selector":"article"` + extra + `}`
+	}
+	create := func(name, extra string) string {
+		return `{"name":"` + name + `","type":"webmonitor","url":"https://example.com/p","interval_seconds":300,"web":` + web(extra) + `}`
+	}
+	for name, extra := range map[string]string{"no reason": `,"ignore_robots":true`, "short reason": `,"ignore_robots":true,"ignore_robots_reason":"short"`} {
+		if rec := do(h, "POST", "/api/v1/admin/sources", admin, create("rb-"+strings.ReplaceAll(name, " ", "-"), extra)); rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("%s: %d, want 422", name, rec.Code)
+		}
+	}
+	const reason = "Permission granted by the publisher on 2026-10-30"
+	id := createSrc(t, h, admin, create("rb-page", `,"ignore_robots":true,"ignore_robots_reason":"`+reason+`"`))
+	audit := func() string { return do(h, "GET", "/api/v1/admin/audit?limit=200", admin, "").Body.String() }
+	a := audit()
+	if strings.Count(a, `"action":"source.override_robots"`) != 1 || !strings.Contains(a, reason) {
+		t.Fatalf("creating with the override must be audited with its reason: %s", a)
+	}
+	put := func(extra string) int {
+		return do(h, "PUT", "/api/v1/admin/sources/"+id, admin, `{"url":"https://example.com/p","enabled":false,"interval_seconds":300,"web":`+web(extra)+`}`).Code
+	}
+	if c := put(`,"ignore_robots":true,"ignore_robots_reason":"` + reason + `"`); c != http.StatusOK {
+		t.Fatalf("resave: %d", c)
+	}
+	if n := strings.Count(audit(), `"action":"source.override_robots"`); n != 1 {
+		t.Fatalf("resaving the same override must not add audit noise, got %d entries", n)
+	}
+	if c := put(`,"ignore_robots":true,"ignore_robots_reason":"New reason after talking to the site owner"`); c != http.StatusOK {
+		t.Fatalf("change reason: %d", c)
+	}
+	if n := strings.Count(audit(), `"action":"source.override_robots"`); n != 2 {
+		t.Fatalf("a changed reason is a new decision and must be audited, got %d", n)
+	}
+	if c := put(""); c != http.StatusOK {
+		t.Fatalf("respect again: %d", c)
+	}
+	if a := audit(); strings.Count(a, `"action":"source.respect_robots"`) != 1 {
+		t.Fatalf("turning the override off must be audited: %s", a)
+	}
+	if v := do(h, "GET", "/api/v1/admin/sources/"+id, admin, "").Body.String(); strings.Contains(v, "ignore_robots") {
+		t.Fatalf("the source must be back to respecting robots.txt: %s", v)
+	}
+}

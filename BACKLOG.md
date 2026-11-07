@@ -174,3 +174,9 @@ Statuses: Proposed | Ready | In Progress | Blocked | Review | Done. Work top-dow
 
 ### TP-032 — Frontend hardening after first real use
 - Status: Proposed · P1 · M7 · [ ] owner/developer walks every screen on a phone and a desktop and reports friction; [ ] Playwright end-to-end tests (login, onboarding, feed live update, alert create with preview, admin source wizard, invite); [ ] generate API types from `openapi.json` and drop the hand-written mirror; [ ] backend-for-frontend with httpOnly refresh cookie; [ ] PWA/push notifications; [ ] accessibility audit with a screen reader
+
+### TP-033 — User documentation (help centre)
+- Status: Review (delivered in 0.12.0-dev; component tests and a browser read-through pending) · P1 · M7 · [x] 10 pages (8 member, 2 operator), search, hints and contextual links, safe renderer, drift tests; [ ] operator reads every page against how the service is really run, especially **How your data is used** (add legal wording and a support contact via `VITE_SUPPORT_EMAIL`); [ ] first members' questions feed the FAQ; [ ] later: screenshots or a short video, first-run guided tour, translations
+
+### TP-034 — Override robots.txt (operator UI)
+- Status: Review (delivered in 0.12.1-dev; not yet run in a browser) · P2 · M7 · [x] guarded override with reason + audit, badge, undo, help; [ ] operator tries it on a blocked page and confirms the audit entry reads well

@@ -167,6 +167,7 @@ Order of work (each step is a vertical slice you can demo):
 - [ ] 7. **Channels.** `POST /api/v1/me/channels` (show the secret once), `GET /api/v1/me/channels`, `POST /api/v1/me/channels/{id}/test`, `GET /api/v1/me/channels/deliveries`, `POST /api/v1/me/channels/{id}/enable`.
 - [ ] 8. **Account.** `POST /api/v1/me/password`.
 - [ ] 9. **Admin area** (role `admin`): invites (`POST /api/v1/admin/invites`, `GET /api/v1/admin/invites`), members (`GET /api/v1/admin/users`, suspend/reactivate/reset-password), sources with a **test-before-save** flow (`POST /api/v1/admin/sources/test`, then `POST /api/v1/admin/sources`), source health (`GET /api/v1/admin/sources`), audit (`GET /api/v1/admin/audit`), X spend (`GET /api/v1/admin/usage`), alert precision and noisy sources/rules (`GET /api/v1/admin/feedback/summary`).
+- [ ] 9b. **Help content** lives in `web/src/help/*.md` (members and operators); change it in the same pull request as any user-visible behavior or limit (tests enforce the numbers). See `docs/FRONTEND.md`.
 - [ ] 10. **Polish rules:** mobile first; show loading, empty and error states; for 429 honor `Retry-After`; never block the UI on the WebSocket; test the "server restarted" path (reconnect + catch-up).
 
 **Acceptance for the whole UI:** a newly invited user reaches a first useful alert in under 10 minutes.

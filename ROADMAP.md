@@ -2,9 +2,10 @@
 
 ## CURRENT STATE & NEXT ACTION (read this first; update at the end of every work session)
 - **Date:** 2026-10-30 · **Backend:** M0 to M7 verified by the owner's full test run (all green, 0.10.1-dev).
-- **Delivered, NOT yet run by a human:** **0.11.0-dev = web app MVP** (`web/`): member screens (onboarding, live feed with views and ratings, alerts with preview, following, delivery, settings) and the operator console (overview, source wizard, invites, members, publish, audit); backend additions `GET /me` and `role` on the user payload. The author type-checked it and ran 33 of its 40 tests in a Node harness; the browser has not been used.
-- **Next action 1 (owner):** unzip keeping your `go.mod`/`go.sum`; `docker compose run --rm check` (Go: expect green; one new test); then `docker compose run --rm web-check` (installs packages, typechecks, tests, builds) and paste failures only; commit `web/package-lock.json`.
+- **Web app (0.11.1-dev):** typecheck, production build and all 40 frontend tests pass in the owner's `web-check` run; the first walkthrough in a real browser is still pending. **Delivered:** **web app MVP** (`web/`): member screens (onboarding, live feed with views and ratings, alerts with preview, following, delivery, settings) and the operator console (overview, source wizard, invites, members, publish, audit); backend additions `GET /me` and `role` on the user payload. Tests are green; the browser has not been used by a human yet.
+- **Next action 1 (owner):** unzip keeping your `go.mod`/`go.sum`; `docker compose run --rm check` (Go: expect green; one new test); `web-check` is green: commit `web/package-lock.json`.
 - **Next action 2 (owner):** `docker compose up --build`, open http://localhost:5173, sign in as the dev operator, add a source with the wizard, publish an announcement, invite yourself, sign up in a private window and walk the member flow on a phone-sized window. Send every point of friction.
+- **User docs (0.12.0-dev):** in-app help centre at `/help` (10 pages). **Before inviting members:** read the data-use page and the operator handbook against reality, set `VITE_SUPPORT_EMAIL`.
 - **Next action 3 (owner gates before real members):** `openapi.json` committed; staging deploy (`docs/DEPLOY.md`), load test, restore drill, source terms (TP-021).
 - **Then:** TP-032 (Playwright e2e, generated types, accessibility audit, BFF cookie), private beta with 10 to 50 members.
 - **Decisions in force:** D-021...D-055.

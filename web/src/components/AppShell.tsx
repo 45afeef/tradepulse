@@ -39,6 +39,7 @@ function Shell() {
         <span className="grow" />
         <LiveBadge />
         {isAdmin && <Link to="/admin" className="mobile-only btn ghost sm icon" aria-label="Operator console"><Icon name="shield" /></Link>}
+        <Link to="/help" className="btn ghost sm icon" aria-label="Help"><Icon name="info" /></Link>
         <Button variant="ghost" size="sm" iconOnly icon={dark ? 'sun' : 'moon'} aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'} onClick={() => setTheme(dark ? 'light' : 'dark')} />
         <Link to="/settings" aria-label="Account settings">{user && <Avatar email={user.email} />}</Link>
       </header>
@@ -50,6 +51,7 @@ function Shell() {
           {ADMIN.map((n) => <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }: { isActive: boolean }) => (isActive ? 'active desktop-only' : 'desktop-only')}><Icon name={n.icon} size={20} /><span>{n.label}</span></NavLink>)}
         </>}
         <span className="grow-sep" />
+        <NavLink to="/help" className={({ isActive }: { isActive: boolean }) => (isActive ? 'active desktop-only' : 'desktop-only')}><Icon name="info" size={20} /><span>Help</span></NavLink>
       </nav>
       <main className="content" id="main"><Outlet /></main>
     </div>

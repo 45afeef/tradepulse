@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/client';
@@ -40,7 +41,7 @@ export function AdminInvites() {
 
   return (
     <div className="page wide">
-      <div className="page-head"><div><h1>Invites</h1><p>TradePulse is invite-only. Each code works once.</p></div><Button icon="plus" onClick={() => setOpen(true)}>New invite</Button></div>
+      <div className="page-head"><div><h1>Invites</h1><p>TradePulse is invite-only. Each code works once. <Link to="/help/operator-handbook">Operator handbook</Link></p></div><Button icon="plus" onClick={() => setOpen(true)}>New invite</Button></div>
       <div className="grid cols-3" style={{ marginBottom: '1rem' }}>
         <Card className="stat"><span className="n">{count('pending')}</span><span className="l">waiting to be used</span></Card>
         <Card className="stat"><span className="n">{count('used')}</span><span className="l">accepted</span></Card>

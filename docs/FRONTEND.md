@@ -31,6 +31,22 @@ In development the browser only talks to the Vite dev server, which proxies `/ap
 | **Publish** | post an announcement through a manual source |
 | **Audit log** | readable actions, who did it, filter, CSV export (formula-safe) |
 
+## Help centre (user documentation)
+Members and operators get help inside the app at `/help` (the **i** button in the top bar, "Help" in the sidebar and in Settings). Pages are plain Markdown in `web/src/help/*.md`, so they ship with the version people run and are reviewed like code.
+
+| Audience | Pages |
+|---|---|
+| Members | Getting started, Your feed (views, ratings), Alerts, Webhooks, Account and security, Questions and troubleshooting, Glossary, How your data is used |
+| Operators only | Operator handbook, Choosing and tuning sources |
+
+Also in the product: (i) hints beside confusing controls (cooldown, importance), "Learn more" links from the alert, delivery, welcome, source-wizard and invite screens, and a search box over all pages.
+
+- **Renderer:** a small safe Markdown subset (`lib/markdown.ts`): headings (`## Title {#anchor}`), lists, tables, fenced code, callouts (`> ...`), bold/italic/code and links. It builds React elements and never injects HTML; raw HTML stays visible text; only relative, `https` and `mailto` links survive.
+- **Add or change a page:** edit/add the `.md` file, import and list it in `web/src/help/index.ts`. Tests fail if a file is not listed, a link or `#anchor` points nowhere, a page has no title/intro, or "TODO/TBD" is left behind.
+- **Facts stay true:** the Go test `TestHelpPagesStateTheRealLimitsAndRetention` derives limits (alerts, webhooks, views, cooldown, auto-pause threshold, lockout, retention, retry schedule) from the code and fails when the help says something different.
+- **Support contact:** set `VITE_SUPPORT_EMAIL` at build time to show a "Write to ..." line on every help page.
+- **Review before inviting members:** the data-use page describes what the system does today; the operator should read it, correct anything that differs from how they run the service and add legal wording if needed.
+
 ## Architecture
 ```
 web/src
@@ -41,6 +57,7 @@ web/src
   components/ FeedCard, AlertEditor, ViewEditor, SourceWizard, AppShell
   pages/      one file per screen; pages/admin/* for the operator console
   lib/        pure helpers (format, backoff, conditions, feedCache, audit, sources, subscriptions)
+  help/       user documentation (Markdown) + registry
   styles/     app.css (tokens, light/dark, components, layout)
   test/       setup
 ```
@@ -54,7 +71,7 @@ Principles: all HTTP goes through `api/client.ts`; all endpoint calls live in `a
 - **Accessibility:** semantic landmarks, labelled controls, focus-visible rings, focus trap and Escape in dialogs, `aria-live` for toasts and previews, keyboard-operable tabs, `prefers-reduced-motion` respected, colour is never the only signal.
 
 ## Tests
-`npm test` (Vitest): API client (single-flight refresh, 401 retry, error mapping), live client (reconnect, catch-up, dedupe, close codes), pure helpers, and component tests (feed card, chip input, dialog, tabs). The author ran the 33 logic tests in a Node harness; the 7 component tests need `npm install` (jsdom) and are run by `web-check` and CI.
+`npm test` (Vitest): help pages (registration, links, anchors), Markdown safety, API client (single-flight refresh, 401 retry, error mapping), live client (reconnect, catch-up, dedupe, close codes), pure helpers, and component tests (feed card, chip input, dialog, tabs). The author ran the 33 logic tests in a Node harness; the 7 component tests need `npm install` (jsdom) and are run by `web-check` and CI.
 
 ## Adding a screen or an endpoint call
 1. Add the call to `api/endpoints.ts` (use `get/post/put/del`) and its types to `api/types.ts`.

@@ -25,3 +25,6 @@ Each source has its own `poll_interval_seconds`, limited only by the global boun
 4. Watch `GET /api/v1/admin/sources` (health, last run, next run) and `GET /api/v1/admin/sources/{id}` (recent runs and errors). `POST …/{id}/run` fetches immediately.
 5. The first successful fetch only **remembers** the current items (no flood). New items appear live for members subscribed to the source name (`cnbc-top`) or its topics (`markets`).
 6. Per-source latency is the `interval_seconds` you choose (bounded by `SOURCE_MIN_INTERVAL_SECONDS` / `SOURCE_MAX_INTERVAL_SECONDS`).
+
+## Overriding robots.txt (operators)
+If `robots.txt` forbids a page, **Test fetch** fails and the source is not read. In the web app an operator can choose **Override robots.txt** for that one source (source wizard after a failed test, or the source's detail view). It requires confirming that the terms of use were checked and a written reason of 10 to 200 characters; both the override and switching it back (**Respect robots.txt again**) are written to the audit log (`source.override_robots`, `source.respect_robots`) with who, when and why, and the source list shows a "robots.txt overridden" badge. Record the date, the terms you relied on and any permission in this file as well. Via the API the same setting is `web.ignore_robots` plus `web.ignore_robots_reason`.

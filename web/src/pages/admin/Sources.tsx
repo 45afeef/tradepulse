@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/endpoints';
 import { errorMessage } from '../../api/client';
@@ -6,7 +7,8 @@ import type { Health, Source } from '../../api/types';
 import { SourceWizard, WebhookSecret } from '../../components/SourceWizard';
 import { duration, plural, shortDateTime, timeAgo } from '../../lib/format';
 import { useDocumentTitle, useTick } from '../../lib/hooks';
-import { INTERVALS, TYPE_INFO, toUpdate } from '../../lib/sources';
+import { INTERVALS, TYPE_INFO, robotsBlocked, toUpdate, withRobotsOverride, withoutRobotsOverride } from '../../lib/sources';
+import { RobotsOverrideModal } from '../../components/RobotsOverride';
 import { Badge, Banner, Button, Card, ChipInput, Empty, Field, Icon, Modal, SkeletonCards, Switch, Tabs, useConfirm, useToast } from '../../ui';
 
 const ATTENTION: Health[] = ['failing', 'overdue', 'degraded'];
@@ -20,6 +22,7 @@ function SourceDetail({ id, onClose }: { id: string; onClose: () => void }) {
   const [entities, setEntities] = useState<string[] | null>(null);
   const [interval, setIntervalS] = useState<number | null>(null);
   const [secret, setSecret] = useState<Source | null>(null);
+  const [robots, setRobots] = useState(false);
   const refresh = () => { void qc.invalidateQueries({ queryKey: ['admin', 'source', id] }); void qc.invalidateQueries({ queryKey: ['admin', 'sources'] }); };
   const s = q.data?.source;
   const act = async (label: string, fn: () => Promise<unknown>) => { try { await fn(); toast.show(label, 'success'); refresh(); } catch (e) { toast.show(errorMessage(e), 'danger'); } };
@@ -48,6 +51,16 @@ function SourceDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <Card className="stat flat"><span className="n">{s.next_run_at ? shortDateTime(s.next_run_at) : 'n/a'}</span><span className="l">next check</span></Card>
           </div>
           {s.url && <p className="small muted mono" style={{ wordBreak: 'break-all' }}>{s.url}</p>}
+          {s.type === 'webmonitor' && s.web && (
+            <Card className="flat stack sm">
+              <div className="row wrap"><b>robots.txt</b>{s.web.ignore_robots ? <Badge tone="warn" icon="alert">overridden</Badge> : <Badge tone="ok" icon="check">respected</Badge>}<span className="grow" />
+                {s.web.ignore_robots
+                  ? <Button variant="secondary" size="sm" onClick={() => void act('Now respecting robots.txt', () => api.admin.updateSource(id, toUpdate(s, { web: withoutRobotsOverride(s.web!) })))}>Respect robots.txt again</Button>
+                  : <Button variant="ghost" size="sm" onClick={() => setRobots(true)}>Override robots.txt…</Button>}</div>
+              {s.web.ignore_robots && <p className="small muted">Reason on record: {s.web.ignore_robots_reason}</p>}
+              {!s.web.ignore_robots && robotsBlocked(s.last_error) && <Banner tone="warn" icon="alert">The site&rsquo;s robots.txt forbids reading this page, so nothing is fetched. See <Link to="/help/sources-guide#robots-txt">what your options are</Link>.</Banner>}
+            </Card>
+          )}
           {s.type === 'webhook' && <Card className="flat stack sm"><b>Webhook</b><p className="small mono">{s.webhook_path}</p><div className="row wrap"><Button variant="secondary" size="sm" icon="key" onClick={async () => { if (await confirm({ title: 'Rotate the signing secret?', message: 'The old secret stops working at once; update the sender right after.', confirmLabel: 'Rotate' })) { try { setSecret(await api.admin.webhookSecret(id)); refresh(); } catch (e) { toast.show(errorMessage(e), 'danger'); } } }}>Rotate secret</Button></div></Card>}
           <div className="grid cols-2">
             {s.type !== 'webhook' && s.type !== 'manual' && <Field label="Check" htmlFor="sd-int"><select id="sd-int" className="select" value={interval ?? s.interval_seconds} onChange={(e) => setIntervalS(Number(e.target.value))}>{[...new Set([...INTERVALS.map(([x]) => x), s.interval_seconds])].sort((a, b) => a - b).map((x) => <option key={x} value={x}>{INTERVALS.find(([v]) => v === x)?.[1] ?? `Every ${duration(x)}`}</option>)}</select></Field>}
@@ -65,6 +78,7 @@ function SourceDetail({ id, onClose }: { id: string; onClose: () => void }) {
             </tbody></table></div>)}
         </div>
       )}
+      {robots && s && s.web && <RobotsOverrideModal onClose={() => setRobots(false)} onApply={(reason) => { setRobots(false); void act('robots.txt override recorded', () => api.admin.updateSource(id, toUpdate(s, { web: withRobotsOverride(s.web!, reason) }))); }} />}
       {secret && <Modal title="Save the new secret" onClose={() => setSecret(null)} footer={<Button onClick={() => setSecret(null)}>I saved it</Button>}><WebhookSecret source={secret} /></Modal>}
     </Modal>
   );
@@ -91,7 +105,7 @@ export function AdminSources() {
         <div className="table-wrap"><table className="table"><thead><tr><th>Source</th><th>Health</th><th>Checks</th><th>Last item</th><th>Items</th></tr></thead><tbody>
           {shown.map((s) => (
             <tr key={s.id} style={{ cursor: 'pointer' }} onClick={() => setOpen(s.id)}>
-              <td><button type="button" className="tab" style={{ padding: 0, fontWeight: 700, color: 'var(--text)' }} onClick={(e) => { e.stopPropagation(); setOpen(s.id); }}>{s.name}</button><div className="small faint">{TYPE_INFO[s.type]?.title ?? s.type}</div></td>
+              <td><button type="button" className="tab" style={{ padding: 0, fontWeight: 700, color: 'var(--text)' }} onClick={(e) => { e.stopPropagation(); setOpen(s.id); }}>{s.name}</button><div className="small faint">{TYPE_INFO[s.type]?.title ?? s.type}</div>{s.web?.ignore_robots && <Badge tone="warn">robots.txt overridden</Badge>}</td>
               <td><Badge tone={s.health}>{s.health}</Badge>{s.last_error && <div className="small faint truncate" style={{ maxWidth: 260 }}>{s.last_error}</div>}</td>
               <td className="small">{s.type === 'webhook' || s.type === 'manual' ? 'push' : duration(s.interval_seconds)}</td>
               <td className="small">{s.last_item_at ? timeAgo(s.last_item_at, now) : '–'}</td>
